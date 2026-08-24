@@ -3,11 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "scripts": {
     "dev": "node --env-file-if-exists=.env.local server.mjs",
     "build": "vite build",
     "start": "NODE_ENV=production node --env-file-if-exists=.env.local server.mjs",
-    "test": "node --test"
+    "test": "node --test",
+    "db:backup": "node --env-file-if-exists=.env.local scripts/backup-database.mjs",
+    "db:restore": "node --env-file-if-exists=.env.local scripts/restore-database.mjs"
   },
   "dependencies": {
     "express": "^5.1.0",

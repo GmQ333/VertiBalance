@@ -11,6 +11,7 @@ import Login from './Login';
 import { api, getAuthToken, setAuthToken } from './api/client';
 
 const DISCLAIMER = '本系统仅用于辅助筛查和健康信息参考，不能替代医生面诊和临床诊断。';
+const ROLE_LABELS = { patient: '患者端', doctor: '医生端', admin: '管理端' };
 const dangerPatterns = [
   /言语不清|说话不清|口角歪/, /单侧.*(无力|麻木|没.{0,2}力)|一边.*(无力|麻木|没.{0,2}力)/, /复视|看东西重影/,
   /意识.*(不清|异常)|昏迷|晕厥/, /无法.*(站立|行走)|站不起来|走不了/, /突发.*严重.*头痛|剧烈头痛/,
@@ -38,15 +39,34 @@ function Brand({ compact = false }) {
   </div>;
 }
 
-function SessionMenu({ role, onLogout }) {
+function RoleDisplay({ role }) {
+  return <div className="role-display" aria-label={`当前工作空间：${ROLE_LABELS[role]}`}>
+    <span className={`role-dot ${role}`} />
+    <span>{ROLE_LABELS[role]}</span>
+  </div>;
+}
+
+function ProfileMenu({ role, user, onLogout }) {
   const [open, setOpen] = useState(false);
-  const labels = { patient: '患者端', doctor: '医生端', admin: '管理端' };
-  return <div className="role-switcher">
-    <button className="role-button" onClick={() => setOpen(!open)}>
-      <span className={`role-dot ${role}`} />
-      <span>{labels[role]}</span><ChevronDown size={15} />
+  const menuRef = useRef(null);
+  const subtitle = role === 'patient' ? '患者' : role === 'doctor' ? `${user.department || '临床科室'} · ${user.title || '医生'}` : '平台管理员';
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (event) => { if (!menuRef.current?.contains(event.target)) setOpen(false); };
+    const closeOnEscape = (event) => { if (event.key === 'Escape') setOpen(false); };
+    document.addEventListener('pointerdown', close);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', closeOnEscape); };
+  }, [open]);
+  return <div className="profile-menu-wrap" ref={menuRef}>
+    <button type="button" className="profile" onClick={() => setOpen(!open)} aria-haspopup="menu" aria-expanded={open}>
+      <div className="avatar">{user.name.slice(0, 1)}</div><div><strong>{user.name}</strong><span>{subtitle}</span></div><ChevronDown className={open ? 'rotated' : ''} size={15}/>
     </button>
-    {open && <div className="role-menu"><button onClick={onLogout}><LockKeyhole size={14}/>安全退出</button></div>}
+    {open && <div className="account-menu" role="menu">
+      <div className="account-summary"><div className="avatar">{user.name.slice(0, 1)}</div><div><strong>{user.name}</strong><span>{user.account}</span></div></div>
+      <button type="button" role="menuitem" onClick={onLogout}><CircleUserRound size={16}/><span>退出并切换账号</span><ArrowRight size={14}/></button>
+      <small>如需使用其他身份，请退出后选择相应账号重新登录。</small>
+    </div>}
   </div>;
 }
 
@@ -59,7 +79,6 @@ function Shell({ role, user, onLogout, active, setActive, children }) {
   async function readNotice(item) { if (!item.read) { await api.readNotification(item.id); setNotices((current) => ({ notifications: current.notifications.map((entry) => entry.id === item.id ? { ...entry, read: true } : entry), unread: Math.max(0, current.unread - 1) })); } }
   async function submitFeedback(){try{await api.feedback(feedback);setFeedbackMessage('感谢反馈，我们已记录你的意见。');setFeedback({...feedback,content:''})}catch(error){setFeedbackMessage(error.message)}}
   const nav = role === 'patient' ? patientNav : role === 'doctor' ? doctorNav : adminNav;
-  const profile = [user.name, role === 'patient' ? '患者' : role === 'doctor' ? `${user.department || '临床科室'} · ${user.title || '医生'}` : '平台管理员'];
   return <div className={`app-shell role-${role}`}>
     <aside className={`sidebar ${mobileOpen ? 'mobile-open' : ''}`}>
       <div className="sidebar-top"><Brand /><button className="close-mobile" onClick={() => setMobileOpen(false)}><X size={20} /></button></div>
@@ -77,9 +96,9 @@ function Shell({ role, user, onLogout, active, setActive, children }) {
         <button className="mobile-menu" onClick={() => setMobileOpen(true)}><Menu size={22} /></button>
         <div className="topbar-context"><span>{role === 'patient' ? '患者健康中心' : role === 'doctor' ? '临床协作中心' : '平台运营中心'}</span><small>今日 {new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })}</small></div>
         <div className="top-actions">
-          <SessionMenu role={role} onLogout={onLogout} />
+          <RoleDisplay role={role} />
           <div className="notification-wrap"><button className="icon-button notification" onClick={() => setNoticeOpen(!noticeOpen)}><Bell size={19} />{notices.unread > 0 && <i />}</button>{noticeOpen && <div className="notification-panel"><div><strong>站内通知</strong><span>{notices.unread} 条未读</span></div>{notices.notifications.length ? notices.notifications.slice(0,8).map((item)=><button className={item.read?'read':''} key={item.id} onClick={()=>readNotice(item)}><i/><div><strong>{item.title}</strong><p>{item.content}</p><time>{new Date(item.createdAt).toLocaleString('zh-CN')}</time></div></button>) : <p className="empty-notice">暂无通知</p>}</div>}</div>
-          <div className="profile"><div className="avatar">{profile[0].slice(0, 1)}</div><div><strong>{profile[0]}</strong><span>{profile[1]}</span></div><ChevronDown size={15} /></div>
+          <ProfileMenu role={role} user={user} onLogout={onLogout}/>
         </div>
       </header>
       <main>{children}</main>

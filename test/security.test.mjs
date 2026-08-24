@@ -5,7 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { screenRisk, redactUnsafeClaims, buildReport, callDoctorAnalysis } from '../server/model-service.mjs';
 import { createToken, hashPassword, verifyPassword, verifyToken } from '../server/security.mjs';
-import { JsonStore } from '../server/store.mjs';
+import { SqliteStore } from '../server/store.mjs';
 
 test('passwords use salted scrypt hashes and verify safely', () => {
   const encoded = hashPassword('Verti123!');
@@ -52,14 +52,19 @@ test('doctor model analysis validates structured output without external network
   } finally { globalThis.fetch = originalFetch; process.env.MEDCHAT_API_KEY = originalKey; }
 });
 
-test('persistent store serializes transactions and writes durable data', async () => {
+test('SQLite store serializes transactions and writes durable data', async () => {
   const tempDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'vertibalance-test-'));
-  const file = path.join(tempDirectory, 'data.json');
+  const file = path.join(tempDirectory, 'data.sqlite');
+  let store;
+  let reloaded;
   try {
-    const store = await new JsonStore(file).init();
+    store = await new SqliteStore(file).init();
     await Promise.all(Array.from({ length: 5 }, (_, index) => store.transaction((data) => { data.meta.counter = (data.meta.counter || 0) + 1; return index; })));
     assert.equal(store.snapshot().meta.counter, 5);
-    const reloaded = await new JsonStore(file).init();
+    reloaded = await new SqliteStore(file).init();
     assert.equal(reloaded.snapshot().meta.counter, 5);
-  } finally { await fs.rm(tempDirectory, { recursive: true, force: true }); }
+  } finally {
+    reloaded?.close(); store?.close();
+    await fs.rm(tempDirectory, { recursive: true, force: true });
+  }
 });
