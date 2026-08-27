@@ -14,8 +14,15 @@ test('database migrations create all required relational tables', async () => {
     for (const table of ['users', 'consultations', 'messages', 'reports', 'risk_assessments', 'bookings', 'followups', 'uploads', 'model_calls', 'audits', 'schema_migrations']) assert.ok(tables.includes(table), `missing table ${table}`);
     assert.equal(store.database.prepare('SELECT COUNT(*) count FROM schema_migrations').get().count, 3);
     assert.equal(store.database.prepare('PRAGMA foreign_keys').get().foreign_keys, 1);
-    assert.equal((await fs.stat(path.join(directory, 'database.sqlite'))).mode & 0o777, 0o600);
-    assert.equal((await fs.stat(directory)).mode & 0o777, 0o700);
+    const databaseStat = await fs.stat(path.join(directory, 'database.sqlite'));
+    const directoryStat = await fs.stat(directory);
+    if (process.platform === 'win32') {
+      assert.ok(databaseStat.isFile());
+      assert.ok(directoryStat.isDirectory());
+    } else {
+      assert.equal(databaseStat.mode & 0o777, 0o600);
+      assert.equal(directoryStat.mode & 0o777, 0o700);
+    }
   } finally {
     store.close();
     await fs.rm(directory, { recursive: true, force: true });
