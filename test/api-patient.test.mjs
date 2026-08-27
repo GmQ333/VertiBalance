@@ -5,6 +5,7 @@ import { createTestApi } from './api-test-helpers.mjs';
 let context;
 let patient;
 let otherPatient;
+let admin;
 let consultation;
 let report;
 let booking;
@@ -13,6 +14,7 @@ let upload;
 test.before(async () => {
   context = await createTestApi('patient-api');
   patient = await context.login('patient');
+  admin = await context.login('admin');
   const suffix = Date.now();
   const registered = await context.request('/auth/register', { method: 'POST', body: { name: '隔离测试患者', account: `other-${suffix}@example.com`, phone: `135${String(suffix).slice(-8)}`, password: 'Secure123!' } });
   otherPatient = registered.data;
@@ -50,6 +52,27 @@ test('GET /consultations/:id enforces object ownership', async () => {
   const forbidden = await context.request(`/consultations/${foreignConsultation.data.consultation.id}`, { token: patient.token });
   assert.equal(forbidden.response.status, 403);
   assert.ok(context.store.snapshot().audits.some((item) => item.action === 'permission_denied' && item.objectId.includes(foreignConsultation.data.consultation.id)));
+});
+
+test('support requests persist, notify administrators and expose patient status', async () => {
+  const created = await context.request('/support-requests', { token: patient.token, method: 'POST', body: { consultationId: consultation.id, category: '问诊流程', contact: '13800138000', summary: '希望健康顾问协助说明后续问诊流程' } });
+  assert.equal(created.response.status, 201);
+  assert.equal(created.data.request.status, 'pending');
+  assert.equal(created.data.request.priority, 'normal');
+  const patientList = await context.request('/support-requests', { token: patient.token });
+  assert.ok(patientList.data.requests.some((item) => item.id === created.data.request.id));
+  const foreignList = await context.request('/support-requests', { token: otherPatient.token });
+  assert.equal(foreignList.data.requests.some((item) => item.id === created.data.request.id), false);
+  const adminList = await context.request('/admin/support-requests', { token: admin.token });
+  assert.ok(adminList.data.requests.some((item) => item.id === created.data.request.id && item.patient.id === patient.user.id));
+  assert.ok(context.store.snapshot(['notifications']).notifications.some((item) => item.objectId === created.data.request.id && item.userId === admin.user.id));
+  const updated = await context.request(`/admin/support-requests/${created.data.request.id}`, { token: admin.token, method: 'PATCH', body: { status: 'contacted', responseMessage: '健康顾问已通过预留电话联系。' } });
+  assert.equal(updated.data.request.status, 'contacted');
+  const notices = await context.request('/notifications', { token: patient.token });
+  assert.ok(notices.data.notifications.some((item) => item.objectId === created.data.request.id && item.type === 'support_update'));
+  const urgent = await context.request('/support-requests', { token: patient.token, method: 'POST', body: { consultationId: consultation.id, category: '其他', contact: '13800138000', summary: '我突然说话不清，而且一侧手臂没有力气' } });
+  assert.equal(urgent.data.request.priority, 'urgent');
+  assert.match(urgent.data.message, /立即前往急诊|120/);
 });
 
 test('POST /consultations/:id/messages persists danger signals without external model access', async () => {

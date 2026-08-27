@@ -4,7 +4,8 @@ import test from 'node:test';
 
 const coveredRoutes = new Set([
   'GET /health', 'POST /auth/register', 'POST /auth/login', 'GET /auth/me',
-  'GET /notifications', 'PATCH /notifications/:id/read', 'POST /feedback', 'GET /patient/dashboard',
+  'GET /notifications', 'PATCH /notifications/:id/read', 'POST /feedback', 'GET /support-requests',
+  'POST /support-requests', 'GET /admin/support-requests', 'PATCH /admin/support-requests/:id', 'GET /patient/dashboard',
   'POST /consultations', 'GET /consultations', 'GET /consultations/:id', 'POST /consultations/:id/messages',
   'POST /consultations/:id/complete', 'GET /reports', 'GET /schedules', 'GET /departments',
   'POST /bookings', 'GET /bookings', 'PATCH /bookings/:id/cancel', 'GET /followups',

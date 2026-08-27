@@ -11,8 +11,8 @@ test('database migrations create all required relational tables', async () => {
   const store = await new SqliteStore(path.join(directory, 'database.sqlite')).init();
   try {
     const tables = store.database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((row) => row.name);
-    for (const table of ['users', 'consultations', 'messages', 'reports', 'risk_assessments', 'bookings', 'followups', 'uploads', 'model_calls', 'audits', 'schema_migrations']) assert.ok(tables.includes(table), `missing table ${table}`);
-    assert.equal(store.database.prepare('SELECT COUNT(*) count FROM schema_migrations').get().count, 3);
+    for (const table of ['users', 'consultations', 'messages', 'reports', 'risk_assessments', 'bookings', 'followups', 'support_requests', 'uploads', 'model_calls', 'audits', 'schema_migrations']) assert.ok(tables.includes(table), `missing table ${table}`);
+    assert.equal(store.database.prepare('SELECT COUNT(*) count FROM schema_migrations').get().count, 4);
     assert.equal(store.database.prepare('PRAGMA foreign_keys').get().foreign_keys, 1);
     const databaseStat = await fs.stat(path.join(directory, 'database.sqlite'));
     const directoryStat = await fs.stat(directory);
@@ -86,7 +86,7 @@ test('backup captures a consistent database, uploads and verifiable checksums', 
     assert.equal(verified.valid, true);
     assert.ok(verified.manifest.checksums['vertibalance.sqlite']);
     assert.ok(verified.manifest.checksums[path.join('uploads', 'sample.pdf')]);
-    assert.equal(verified.manifest.migrations.length, 3);
+    assert.equal(verified.manifest.migrations.length, 4);
     const restored = await restoreDatabaseBackup({ backupDirectory: backup.directory, targetDatabasePath: path.join(directory, 'restored', 'database.sqlite'), targetUploadDirectory: path.join(directory, 'restored', 'uploads') });
     const reopened = await new SqliteStore(restored.databasePath).init();
     try {

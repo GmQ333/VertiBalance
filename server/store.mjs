@@ -23,6 +23,7 @@ const entityDefinitions = [
   { key: 'notifications', table: 'notifications', columns: { user_id: (v) => v.userId, type: (v) => v.type, read: (v) => Number(Boolean(v.read)), created_at: (v) => v.createdAt } },
   { key: 'uploads', table: 'uploads', columns: { patient_id: (v) => v.patientId, consultation_id: (v) => v.consultationId || null, stored_name: (v) => v.storedName, mime_type: (v) => v.mimeType, created_at: (v) => v.createdAt } },
   { key: 'feedback', table: 'feedback', columns: { user_id: (v) => v.userId, role: (v) => v.role, rating: (v) => v.rating, status: (v) => v.status, created_at: (v) => v.createdAt } },
+  { key: 'supportRequests', table: 'support_requests', columns: { patient_id: (v) => v.patientId, consultation_id: (v) => v.consultationId || null, category: (v) => v.category, status: (v) => v.status, priority: (v) => v.priority, created_at: (v) => v.createdAt } },
   { key: 'riskRules', table: 'risk_rules', columns: { label: (v) => v.label, enabled: (v) => Number(Boolean(v.enabled)), updated_at: (v) => v.updatedAt } },
   { key: 'knowledge', table: 'knowledge', columns: { category: (v) => v.category, title: (v) => v.title, status: (v) => v.status, updated_at: (v) => v.updatedAt } },
   { key: 'modelCalls', table: 'model_calls', columns: { consultation_id: (v) => v.consultationId || null, user_id: (v) => v.userId || null, model: (v) => v.model, success: (v) => Number(Boolean(v.success)), created_at: (v) => v.createdAt } },

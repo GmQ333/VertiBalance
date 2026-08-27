@@ -6,7 +6,7 @@ const iso = (offsetHours = 0) => new Date(now.getTime() + offsetHours * 3600000)
 export function createSeedData() {
   const commonPassword = hashPassword('Verti123!');
   return {
-    meta: { schemaVersion: 3, createdAt: iso() },
+    meta: { schemaVersion: 4, createdAt: iso() },
     users: [
       { id: 'usr_patient_demo', role: 'patient', name: '苏晴', account: 'patient@demo.com', phone: '13800000001', passwordHash: commonPassword, status: 'active', gender: '女', age: 34, createdAt: iso(-720), lastLoginAt: null },
       { id: 'usr_patient_lin', role: 'patient', name: '林晓雯', account: 'lin@demo.com', phone: '13800000011', passwordHash: commonPassword, status: 'active', gender: '女', age: 56, createdAt: iso(-1000), lastLoginAt: null },
@@ -56,6 +56,7 @@ export function createSeedData() {
     notifications: [],
     uploads: [],
     feedback: [],
+    supportRequests: [],
     riskRules: [
       { id: 'rule_speech', label: '言语不清', keywords: ['说话不清', '言语不清', '口角歪'], enabled: true, updatedAt: iso(-500) },
       { id: 'rule_weakness', label: '单侧肢体无力或麻木', keywords: ['一边手臂没有力气', '单侧无力', '单侧麻木'], enabled: true, updatedAt: iso(-500) },
