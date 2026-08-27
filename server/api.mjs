@@ -171,6 +171,57 @@ export function createApiRouter(store, options = {}) {
     res.status(201).json({ feedback: item });
   }));
 
+  router.get('/support-requests', requireRole('patient'), (req, res) => {
+    const requests = store.snapshot(['supportRequests']).supportRequests
+      .filter((item) => item.patientId === req.user.id)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    res.json({ requests });
+  });
+
+  router.post('/support-requests', requireRole('patient'), asyncRoute(async (req, res) => {
+    const category = String(req.body?.category || '').trim();
+    const contact = String(req.body?.contact || '').trim();
+    const summary = String(req.body?.summary || '').trim();
+    const consultationId = req.body?.consultationId || null;
+    const categories = new Set(['问诊流程', '预约协助', '资料上传', '其他']);
+    if (!categories.has(category)) throw httpError(400, 'INVALID_SUPPORT_CATEGORY', '请选择有效的帮助类型');
+    if (contact.length < 5 || contact.length > 80) throw httpError(400, 'INVALID_SUPPORT_CONTACT', '请填写有效的联系电话或其他联系方式');
+    if (summary.length < 5 || summary.length > 500) throw httpError(400, 'INVALID_SUPPORT_SUMMARY', '问题描述需为 5 到 500 个字符');
+    const request = await store.transaction(['supportRequests', 'consultations', 'riskRules', 'users', 'notifications', 'audits'], (data) => {
+      const consultation = consultationId ? data.consultations.find((item) => item.id === consultationId && item.patientId === req.user.id) : null;
+      if (consultationId && !consultation) throw httpError(400, 'INVALID_CONSULTATION', '关联问诊不存在或不属于当前患者');
+      const risk = screenRisk(summary, data.riskRules);
+      const urgent = consultation?.riskLevel === 'emergency' || risk.riskLevel === 'emergency';
+      const created = { id: createId('sup'), patientId: req.user.id, consultationId, category, contact, summary, status: 'pending', priority: urgent ? 'urgent' : 'normal', createdAt: now(), updatedAt: now(), responseMessage: '' };
+      data.supportRequests.push(created);
+      for (const admin of data.users.filter((item) => item.role === 'admin' && item.status === 'active')) data.notifications.push(notification(admin.id, urgent ? 'support_urgent' : 'support', urgent ? '患者帮助请求含危险信号' : '新的患者帮助请求', `${req.user.name}提交了“${category}”请求，请及时处理。`, created.id));
+      data.audits.push(auditEntry(req.user, 'support_requested', 'support_request', created.id, urgent ? '患者提交人工帮助请求，规则标记紧急' : '患者提交人工帮助请求'));
+      return created;
+    });
+    res.status(201).json({ request, message: request.priority === 'urgent' ? '描述中包含危险信号，请立即前往急诊或呼叫 120，不要等待平台联系。' : '帮助请求已提交，平台人员将按顺序联系你。' });
+  }));
+
+  router.get('/admin/support-requests', requireRole('admin'), (req, res) => {
+    const data = store.snapshot(['supportRequests', 'users']);
+    const requests = data.supportRequests.map((item) => ({ ...item, patient: publicUser(data.users.find((user) => user.id === item.patientId)) })).sort((a, b) => Number(b.priority === 'urgent') - Number(a.priority === 'urgent') || b.createdAt.localeCompare(a.createdAt));
+    res.json({ requests });
+  });
+
+  router.patch('/admin/support-requests/:id', requireRole('admin'), asyncRoute(async (req, res) => {
+    const status = String(req.body?.status || '');
+    const responseMessage = String(req.body?.responseMessage || '').trim().slice(0, 500);
+    if (!['contacted', 'closed'].includes(status)) throw httpError(400, 'INVALID_SUPPORT_STATUS', '处理状态只能更新为已联系或已关闭');
+    const request = await store.transaction(['supportRequests', 'notifications', 'audits'], (data) => {
+      const target = data.supportRequests.find((item) => item.id === req.params.id);
+      if (!target) throw httpError(404, 'NOT_FOUND', '帮助请求不存在');
+      target.status = status; target.responseMessage = responseMessage; target.updatedAt = now();
+      data.notifications.push(notification(target.patientId, 'support_update', status === 'contacted' ? '平台人员已联系你' : '帮助请求已关闭', responseMessage || '你的人工帮助请求状态已更新。', target.id));
+      data.audits.push(auditEntry(req.user, 'support_updated', 'support_request', target.id, `帮助请求更新为 ${status}`));
+      return target;
+    });
+    res.json({ request });
+  }));
+
   router.get('/patient/dashboard', requireRole('patient'), (req, res) => {
     const data = store.snapshot(['reports', 'bookings', 'followups', 'knowledge']);
     const reports = data.reports.filter((item) => item.patientId === req.user.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt));

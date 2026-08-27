@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Activity, AlertTriangle, ArrowRight, Bot, Check, CircleUserRound, Clock3,
-  FileClock, Hospital, LockKeyhole, Send, ShieldCheck, Sparkles,
+  FileClock, Hospital, LockKeyhole, Send, ShieldCheck, Sparkles, X,
 } from 'lucide-react';
 import { api } from '../api/client';
 
@@ -20,6 +20,11 @@ export default function Consultation({ onReport }) {
   const [triage, setTriage] = useState(null);
   const [modelConfigured, setModelConfigured] = useState(null);
   const [startupError, setStartupError] = useState('');
+  const [supportOpen, setSupportOpen] = useState(false);
+  const [supportRequests, setSupportRequests] = useState([]);
+  const [supportForm, setSupportForm] = useState({ category: '问诊流程', contact: '', summary: '' });
+  const [supportMessage, setSupportMessage] = useState('');
+  const [supportSubmitting, setSupportSubmitting] = useState(false);
   const scrollRef = useRef(null);
   const progress = Math.min(20 + Math.max(0, messages.length - 1) * 12, 88);
   const quickPrompts = messages.length < 3 ? ['周围在旋转', '感觉头昏沉', '走路不稳'] : ['有恶心或呕吐', '转头时更明显', '没有以上情况'];
@@ -62,8 +67,24 @@ export default function Consultation({ onReport }) {
     finally { setLoading(false); }
   }
 
+  function openSupport() {
+    setSupportOpen(true); setSupportMessage('');
+    api.supportRequests().then((result) => setSupportRequests(result.requests)).catch((error) => setSupportMessage(error.message));
+  }
+
+  async function submitSupport() {
+    if (supportSubmitting) return;
+    setSupportSubmitting(true); setSupportMessage('');
+    try {
+      const result = await api.createSupportRequest({ ...supportForm, consultationId });
+      setSupportMessage(result.message); setSupportForm((current) => ({ ...current, summary: '' }));
+      const list = await api.supportRequests(); setSupportRequests(list.requests);
+    } catch (error) { setSupportMessage(error.message); }
+    finally { setSupportSubmitting(false); }
+  }
+
   return <div className="consult-page">
-    <div className="consult-header"><div><span className="live-dot" />智能问诊进行中</div><div className="consult-progress"><span>信息采集 {progress}%</span><i><b style={{ width: `${progress}%` }} /></i></div><button className="outline-button" title={!canComplete ? '请至少完成三轮症状采集' : ''} disabled={!consultationId || loading || !canComplete} onClick={completeConsultation}>结束并生成报告</button></div>
+    <div className="consult-header"><div><span className="live-dot" />智能问诊进行中</div><div className="consult-progress"><span>信息采集 {progress}%</span><i><b style={{ width: `${progress}%` }} /></i></div><button className="support-entry" aria-label="人工帮助" title="联系平台健康顾问" onClick={openSupport}><CircleUserRound size={16}/><span>人工帮助</span></button><button className="outline-button" title={!canComplete ? '请至少完成三轮症状采集' : ''} disabled={!consultationId || loading || !canComplete} onClick={completeConsultation}>结束并生成报告</button></div>
     {startupError && <div className="emergency-card"><div className="emergency-icon"><AlertTriangle size={22}/></div><div><strong>无法创建问诊会话</strong><p>{startupError}</p></div><button onClick={() => window.location.reload()}>重试</button></div>}
     <RiskNotice riskLevel={riskLevel} />
     <div className="consult-layout">
@@ -90,8 +111,9 @@ export default function Consultation({ onReport }) {
           <div className="collection-list"><div className="checked"><Check size={14}/><span>主要症状</span><b>已采集</b></div><div className={messages.length > 2 ? 'checked' : ''}><Clock3 size={14}/><span>发作特点</span><b>{messages.length > 2 ? '已采集' : '采集中'}</b></div><div><Activity size={14}/><span>伴随症状</span><b>{userMessageCount >= 2 ? '已记录' : '待询问'}</b></div><div><AlertTriangle size={14}/><span>危险信号</span><b>{urgent ? '已触发' : '持续筛查'}</b></div><div><FileClock size={14}/><span>既往史与用药</span><b>{userMessageCount >= 3 ? '已记录' : '待询问'}</b></div></div>
         </div>
         <div className="side-card safety-card"><div className="safety-head"><ShieldCheck size={18}/><strong>危险信号持续筛查中</strong></div><p>如果你现在出现以下任一情况，请直接告诉我：</p><ul><li>单侧肢体无力或麻木</li><li>说话不清或看东西重影</li><li>无法站立、突然剧烈头痛</li></ul></div>
-        <div className="human-help"><CircleUserRound size={20}/><div><strong>需要人工帮助？</strong><span>可联系平台健康顾问</span></div><button>联系</button></div>
+        <div className="human-help"><CircleUserRound size={20}/><div><strong>需要人工帮助？</strong><span>可提交联系请求并查看进度</span></div><button onClick={openSupport}>联系</button></div>
       </aside>
     </div>
+    {supportOpen && <div className="modal-backdrop" onClick={() => setSupportOpen(false)}><section className="knowledge-modal support-modal" role="dialog" aria-modal="true" aria-labelledby="support-title" onClick={(event) => event.stopPropagation()}><button className="modal-close" aria-label="关闭人工帮助" onClick={() => setSupportOpen(false)}><X size={19}/></button><span className="eyebrow"><CircleUserRound size={15}/>人工帮助</span><h2 id="support-title">联系平台健康顾问</h2><p>请留下可用联系方式和需要协助的事项。健康顾问可以协助平台流程，但不能在线诊断或处理急症。</p>{urgent && <div className="support-urgent"><AlertTriangle size={18}/><div><strong>当前问诊含较高或紧急风险</strong><span>如有危险信号，请立即前往急诊或呼叫 120，不要等待平台联系。</span></div></div>}<div className="support-form"><label>帮助类型<select value={supportForm.category} onChange={(event) => setSupportForm({ ...supportForm, category: event.target.value })}><option>问诊流程</option><option>预约协助</option><option>资料上传</option><option>其他</option></select></label><label>联系电话或其他联系方式<input value={supportForm.contact} onChange={(event) => setSupportForm({ ...supportForm, contact: event.target.value })} placeholder="例如：13800138000"/></label><label>问题摘要<textarea value={supportForm.summary} onChange={(event) => setSupportForm({ ...supportForm, summary: event.target.value })} placeholder="请简要描述需要人工协助的事项，不要在此填写完整病历…"/></label><button className="primary-button" disabled={supportSubmitting || supportForm.contact.trim().length < 5 || supportForm.summary.trim().length < 5} onClick={submitSupport}>{supportSubmitting ? '提交中…' : '提交联系请求'}</button></div>{supportMessage && <div className={`inline-feedback ${supportMessage.includes('已提交') ? 'success' : supportMessage.includes('急诊') ? 'warning' : ''}`}>{supportMessage}</div>}{supportRequests[0] && <div className="support-latest"><div><span>最近请求</span><strong>{supportRequests[0].category}</strong></div><em className={supportRequests[0].priority === 'urgent' ? 'urgent' : ''}>{supportRequests[0].status === 'pending' ? '待受理' : supportRequests[0].status === 'contacted' ? '已联系' : '已关闭'}</em><p>{supportRequests[0].responseMessage || supportRequests[0].summary}</p></div>}</section></div>}
   </div>;
 }
