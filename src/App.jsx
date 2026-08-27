@@ -156,6 +156,7 @@ function Consultation({ onReport }) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [riskLevel, setRiskLevel] = useState('low');
+  const [triage, setTriage] = useState(null);
   const [modelConfigured, setModelConfigured] = useState(null);
   const [startupError, setStartupError] = useState('');
   const scrollRef = useRef(null);
@@ -186,6 +187,7 @@ function Consultation({ onReport }) {
       const data = await api.sendConsultationMessage(consultationId, content);
       setMessages((current) => [...current, data.message]);
       setRiskLevel(data.riskLevel || 'medium');
+      setTriage(data.triage || null);
     } catch (error) {
       setMessages((current) => [...current, { role: 'assistant', content: error.message || '智能问诊服务暂时不可用，已保留你的描述。建议稍后重试或直接咨询医生。', error: true }]);
     } finally { setLoading(false); setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 50); }
@@ -212,6 +214,7 @@ function Consultation({ onReport }) {
             {message.role === 'assistant' && <div className="mini-ai"><Sparkles size={15}/></div>}
             <div className={`bubble ${message.error ? 'error' : ''}`}>{message.content}</div>
           </div>)}
+          {triage && riskLevel !== 'low' && <div className={`chat-guidance ${riskLevel}`}><div className="guidance-icon"><Hospital size={19}/></div><div><span>{riskLevel === 'emergency' ? '紧急就医提示' : '本轮就医建议'}</span><strong>{triage.recommendedDepartment}</strong><p>{triage.careTimeframe}</p></div>{riskLevel === 'emergency' ? <button className="danger-action" onClick={() => window.alert('请立即拨打 120 或当地急救电话，并请家人陪同。')}>查看急救指引</button> : <button className="primary-button" disabled={!canComplete || loading} onClick={completeConsultation}>{canComplete ? '生成报告并继续预约' : '完成三轮问诊后可预约'}<ArrowRight size={15}/></button>}<small>建议来自本轮规则筛查与结构化问诊结果，最终以医生判断为准。</small></div>}
           {loading && <div className="message-row assistant"><div className="mini-ai"><Sparkles size={15}/></div><div className="bubble typing"><i/><i/><i/></div></div>}
           <div ref={scrollRef}/>
         </div>
@@ -348,11 +351,27 @@ function LiveFollowups() {
   return <div className="page"><div className="page-title"><div><span className="eyebrow"><Activity size={15}/>诊后健康管理</span><h1>康复随访</h1><p>反馈真实症状变化；异常结果会标记给医生关注。</p></div></div>{message && <div className={`inline-feedback ${message.includes('异常') || message.includes('就医') ? 'warning' : 'success'}`}>{message}</div>}{items.length ? <div className="followup-grid">{items.map((item,index) => <div className={`followup-card live ${item.abnormal ? 'abnormal' : ''}`} key={item.id}><div className={`task-icon t${index%3}`}><ClipboardCheck size={20}/></div><div><span>{item.type} · 截止 {new Date(item.dueAt).toLocaleString('zh-CN')}</span><h3>{item.title}</h3><p>{item.status === 'completed' ? `已提交 · 严重程度 ${item.feedback?.severity}/10 · 过去 24 小时 ${item.feedback?.frequency ?? 0} 次` : '请按计划记录当前症状、发作频率和用药情况'}</p></div><em>{item.abnormal ? '异常关注' : item.status === 'completed' ? '已完成' : '待完成'}</em>{item.status === 'pending' && <button className="primary-button" onClick={() => setActiveId(activeId === item.id ? '' : item.id)}>开始填写</button>}{activeId === item.id && <div className="followup-form"><label>当前眩晕严重程度 <strong>{form.severity}/10</strong><input type="range" min="0" max="10" value={form.severity} onChange={(event) => setForm({...form,severity:Number(event.target.value)})}/></label><label>过去 24 小时发作次数 <input type="number" min="0" max="1000" value={form.frequency} onChange={(event) => setForm({...form,frequency:Number(event.target.value)})}/></label><label>症状变化<textarea value={form.text} onChange={(event)=>setForm({...form,text:event.target.value})} placeholder="例如：今天眩晕次数减少，但起床时仍明显…"/></label><label className="check-line"><input type="checkbox" checked={form.medicationTaken} onChange={(event)=>setForm({...form,medicationTaken:event.target.checked})}/>已按医嘱用药</label><button className="dark-button" onClick={() => submit(item.id)}>提交随访反馈</button></div>}</div>)}</div> : <EmptyState icon={ClipboardCheck} title="暂无随访任务" message="医生安排随访后，任务和提醒会显示在这里。"/>}</div>;
 }
 
+function knowledgeCategoryForReport(report) {
+  if (!report) return '';
+  if (['emergency', 'high'].includes(report.riskLevel)) return '危险信号';
+  const direction = `${report.possibleDirections?.join(' ') || ''} ${report.aiRiskNote || ''}`;
+  if (direction.includes('耳石') || direction.includes('位置性')) return '耳石症';
+  if (direction.includes('梅尼埃')) return '梅尼埃病';
+  if (direction.includes('偏头痛')) return '前庭性偏头痛';
+  if (direction.includes('前庭神经炎')) return '前庭神经炎';
+  return '就医准备';
+}
+
 function LiveKnowledge() {
-  const [items, setItems] = useState([]); const [selected, setSelected] = useState(null); const [category, setCategory] = useState(''); const [error, setError] = useState('');
+  const [items, setItems] = useState([]); const [reports, setReports] = useState([]); const [selected, setSelected] = useState(null); const [category, setCategory] = useState(''); const [error, setError] = useState('');
   useEffect(() => { let active = true; setError(''); api.knowledge(category).then((result) => active && setItems(result.items)).catch((requestError) => active && setError(requestError.message)); return () => { active = false; }; }, [category]);
+  useEffect(() => { let active = true; api.reports().then((result) => active && setReports(result.reports)).catch(() => {}); return () => { active = false; }; }, []);
   const categories = ['全部', '耳石症', '梅尼埃病', '前庭神经炎', '前庭性偏头痛', '日常防护', '就医准备', '危险信号', '康复训练'];
-  return <div className="page"><div className="page-title"><div><span className="eyebrow"><BookOpen size={15}/>专业健康知识库</span><h1>眩晕健康科普</h1><p>科普内容与诊断结论分开呈现，仅用于健康教育。</p></div></div><div className="knowledge-filters">{categories.map((item) => <button className={(category || '全部') === item ? 'active' : ''} key={item} onClick={() => setCategory(item === '全部' ? '' : item)}>{item}</button>)}</div>{error && <div className="inline-feedback">{error}</div>}{items.length ? <div className="article-grid live">{items.map((item,index)=><article key={item.id} onClick={()=>setSelected(item)}><div className={`article-cover cover-${index%4+1}`}><BookOpen size={30}/></div><span className="tag">{item.category}</span><h3>{item.title}</h3><p>{item.summary}</p><small>阅读详情 <ArrowRight size={14}/></small></article>)}</div> : <EmptyState icon={BookOpen} title="暂无匹配科普" message="当前分类暂无文章，已建议你浏览全部眩晕健康知识。" action="查看全部科普" onAction={() => setCategory('')}/>} {selected && <div className="modal-backdrop" onClick={()=>setSelected(null)}><article className="knowledge-modal" onClick={(event)=>event.stopPropagation()}><button className="modal-close" onClick={()=>setSelected(null)}><X size={19}/></button><span className="tag">{selected.category}</span><h2>{selected.title}</h2><p>{selected.content}</p><div className="report-notice"><ShieldCheck size={17}/><div><strong>健康教育提示</strong><p>本文不构成诊断或治疗建议。如出现危险信号，请立即就医。</p></div></div></article></div>}</div>;
+  const latestReport = [...reports].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+  const inferredCategory = knowledgeCategoryForReport(latestReport);
+  const recommendedCategory = items.some((item) => item.category === inferredCategory) ? inferredCategory : items.some((item) => item.category === '就医准备') ? '就医准备' : inferredCategory;
+  const visibleItems = category || !recommendedCategory ? items : [...items].sort((a, b) => Number(b.category === recommendedCategory) - Number(a.category === recommendedCategory));
+  return <div className="page"><div className="page-title"><div><span className="eyebrow"><BookOpen size={15}/>专业健康知识库</span><h1>眩晕健康科普</h1><p>科普内容与诊断结论分开呈现，仅用于健康教育。</p></div></div>{latestReport && <div className="knowledge-reason"><Sparkles size={18}/><div><strong>已结合最近一次问诊为你排序</strong><span>{['emergency', 'high'].includes(latestReport.riskLevel) ? '报告含较高风险提示，优先了解危险信号和及时就医。' : `报告方向与“${recommendedCategory}”相关，优先展示对应科普和就医准备。`}</span></div><button onClick={() => setCategory(recommendedCategory)}>只看相关推荐</button></div>}<div className="knowledge-filters">{categories.map((item) => <button className={(category || '全部') === item ? 'active' : ''} key={item} onClick={() => setCategory(item === '全部' ? '' : item)}>{item}</button>)}</div>{error && <div className="inline-feedback">{error}</div>}{visibleItems.length ? <div className="article-grid live">{visibleItems.map((item,index)=><article className={!category && item.category === recommendedCategory ? 'recommended-article' : ''} key={item.id} onClick={()=>setSelected(item)}><div className={`article-cover cover-${index%4+1}`}><BookOpen size={30}/></div><span className="tag">{item.category}</span>{!category && item.category === recommendedCategory && <span className="report-match">报告相关</span>}<h3>{item.title}</h3><p>{item.summary}</p><small>阅读详情 <ArrowRight size={14}/></small></article>)}</div> : <EmptyState icon={BookOpen} title="暂无匹配科普" message="当前分类暂无文章，已建议你浏览全部眩晕健康知识。" action="查看全部科普" onAction={() => setCategory('')}/>} {selected && <div className="modal-backdrop" onClick={()=>setSelected(null)}><article className="knowledge-modal" onClick={(event)=>event.stopPropagation()}><button className="modal-close" onClick={()=>setSelected(null)}><X size={19}/></button><span className="tag">{selected.category}</span><h2>{selected.title}</h2><p>{selected.content}</p><div className="report-notice"><ShieldCheck size={17}/><div><strong>健康教育提示</strong><p>本文不构成诊断或治疗建议。如出现危险信号，请立即就医。</p></div></div></article></div>}</div>;
 }
 
 function PatientDocuments() {
