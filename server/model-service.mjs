@@ -16,10 +16,46 @@ const signalRules = [
   ['突发严重头痛', /突发.{0,5}(严重|剧烈).{0,3}头痛|剧烈头痛/],
 ];
 
+const negationPrefix = /(?:没有|并无|并未|无|未见|未出现|否认|不伴有|不伴|没出现|不是)(?:任何|明显|上述|这些)?\s*$/;
+const clauseBoundary = /[。！？；;，,]|但是|但|然而|不过|却/g;
+
+function isNegated(content, matchIndex) {
+  const beforeMatch = content.slice(0, matchIndex);
+  const immediatePrefix = beforeMatch.slice(-12);
+  if (negationPrefix.test(immediatePrefix)) return true;
+
+  let boundaryEnd = 0;
+  for (const match of beforeMatch.matchAll(clauseBoundary)) boundaryEnd = match.index + match[0].length;
+  const clausePrefix = beforeMatch.slice(boundaryEnd).trim();
+  return /^(?:没有|并无|并未|无|未见|未出现|否认|不伴有|不伴|没出现)/.test(clausePrefix);
+}
+
+function hasNonNegatedMatch(content, pattern) {
+  const matcher = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`);
+  for (const match of content.matchAll(matcher)) {
+    if (!isNegated(content, match.index)) return true;
+  }
+  return false;
+}
+
+function includesNonNegatedKeyword(content, keyword) {
+  let index = content.indexOf(keyword);
+  while (index >= 0) {
+    if (!isNegated(content, index)) return true;
+    index = content.indexOf(keyword, index + keyword.length);
+  }
+  return false;
+}
+
 export function screenRisk(content = '', customRules = []) {
-  const configuredSignals = customRules.filter((rule) => rule.enabled && Array.isArray(rule.keywords) && rule.keywords.some((keyword) => keyword && content.includes(keyword))).map((rule) => rule.label);
-  const dangerSignals = [...new Set([...signalRules.filter(([, rule]) => rule.test(content)).map(([name]) => name), ...configuredSignals])];
-  const highRiskHistory = /房颤|脑卒中|高血压|糖尿病|冠心病/.test(content);
+  const configuredSignals = customRules
+    .filter((rule) => rule.enabled && Array.isArray(rule.keywords) && rule.keywords.some((keyword) => keyword && includesNonNegatedKeyword(content, keyword)))
+    .map((rule) => rule.label);
+  const dangerSignals = [...new Set([
+    ...signalRules.filter(([, rule]) => hasNonNegatedMatch(content, rule)).map(([name]) => name),
+    ...configuredSignals,
+  ])];
+  const highRiskHistory = ['房颤', '脑卒中', '高血压', '糖尿病', '冠心病'].some((keyword) => includesNonNegatedKeyword(content, keyword));
   return {
     dangerSignals,
     riskLevel: dangerSignals.length ? 'emergency' : highRiskHistory ? 'high' : 'medium',
