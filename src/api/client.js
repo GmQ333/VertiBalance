@@ -32,6 +32,7 @@ export const api = {
   updateProfile: (body) => apiRequest('/auth/profile', { method: 'PATCH', body }),
   notifications: () => apiRequest('/notifications'),
   readNotification: (id) => apiRequest(`/notifications/${id}/read`, { method: 'PATCH', body: {} }),
+  readAllNotifications: () => apiRequest('/notifications/read-all', { method: 'PATCH', body: {} }),
   feedback: (body) => apiRequest('/feedback', { method: 'POST', body }),
   supportRequests: () => apiRequest('/support-requests'),
   createSupportRequest: (body) => apiRequest('/support-requests', { method: 'POST', body }),

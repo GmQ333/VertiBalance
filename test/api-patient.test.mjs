@@ -208,4 +208,5 @@ test('PATCH /bookings/:id/cancel releases capacity and closes transfer access', 
   assert.equal(result.data.booking.status, 'cancelled');
   const after = context.store.snapshot();
   assert.equal(after.schedules.find((item) => item.id === booking.scheduleId).remaining, before + 1);
+  assert.ok(after.notifications.some((item) => item.type === 'booking_cancelled' && item.objectId === booking.id && item.userId === booking.doctorId));
 });
