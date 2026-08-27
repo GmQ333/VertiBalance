@@ -2,10 +2,16 @@ import express from 'express';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import multer from 'multer';
-import { buildReport, callDoctorAnalysis, callMedicalModel, configureRuntimeModel, screenRisk } from './model-service.mjs';
+import { buildReport, callDoctorAnalysis, callPatientReport, callPatientTurn, configureRuntimeModel, screenRisk } from './model-service.mjs';
 import { createId, createToken, hashPassword, publicUser, verifyPassword, verifyToken } from './security.mjs';
 
 const riskWeight = { low: 1, medium: 2, high: 3, emergency: 4 };
+const careByRisk = {
+  low: { careTimeframe: '按需就医并留意变化', immediateCare: false },
+  medium: { careTimeframe: '一周内就医', immediateCare: false },
+  high: { careTimeframe: '24 小时内就医', immediateCare: false },
+  emergency: { careTimeframe: '立即急诊或呼叫 120', immediateCare: true },
+};
 const now = () => new Date().toISOString();
 const strongPassword = (value) => typeof value === 'string' && value.length >= 8 && /[A-Za-z]/.test(value) && /\d/.test(value);
 const followupTypes = new Set(['medication', 'revisit', 'rehabilitation', 'questionnaire', 'warning']);
@@ -52,6 +58,25 @@ function joinSchedule(data, schedule) {
   const doctor = data.users.find((user) => user.id === schedule.doctorId);
   const department = data.departments.find((item) => item.id === schedule.departmentId);
   return { ...schedule, doctor: doctor ? { id: doctor.id, name: doctor.name, title: doctor.title, department: doctor.department } : null, department: department?.name || '未配置' };
+}
+
+function higherRisk(first = 'low', second = 'low') {
+  return riskWeight[second] > riskWeight[first] ? second : first;
+}
+
+function normalizeReportRisk(report, consultation) {
+  const dangerSignals = [...new Set([...(consultation.dangerSignals || []), ...(report.dangerSignals || [])])];
+  let riskLevel = higherRisk(consultation.riskLevel, report.riskLevel);
+  if (dangerSignals.length) riskLevel = 'emergency';
+  const care = careByRisk[riskLevel];
+  return {
+    ...report,
+    dangerSignals,
+    riskLevel,
+    careTimeframe: care.careTimeframe,
+    immediateCare: care.immediateCare,
+    recommendedDepartment: riskLevel === 'emergency' ? '急诊/神经内科' : report.recommendedDepartment,
+  };
 }
 
 export function createApiRouter(store, options = {}) {
@@ -190,50 +215,85 @@ export function createApiRouter(store, options = {}) {
     const content = String(req.body?.content || '').trim();
     if (!content || content.length > 2000) throw httpError(400, 'INVALID_MESSAGE', '消息不能为空且不能超过 2000 字');
     const risk = screenRisk(content, store.snapshot(['riskRules']).riskRules);
-    const consultation = await store.transaction(['consultations', 'messages', 'riskAssessments'], (data) => {
+    const consultation = await store.transaction(['consultations', 'messages'], (data) => {
       const target = data.consultations.find((item) => item.id === req.params.id && item.patientId === req.user.id);
       if (!target) throw httpError(404, 'NOT_FOUND', '问诊会话不存在');
       if (target.status !== 'in_progress') throw httpError(409, 'CONSULTATION_CLOSED', '该问诊已经结束');
       data.messages.push({ id: createId('msg'), consultationId: target.id, role: 'user', content, createdAt: now() });
       target.dangerSignals = [...new Set([...target.dangerSignals, ...risk.dangerSignals])];
       if (riskWeight[risk.riskLevel] > riskWeight[target.riskLevel]) target.riskLevel = risk.riskLevel;
-      const immediateCare = target.riskLevel === 'emergency';
-      data.riskAssessments.push({ id: createId('rsk'), consultationId: target.id, ruleRiskLevel: risk.riskLevel, modelRiskLevel: null, finalRiskLevel: target.riskLevel, recommendedDepartment: immediateCare ? '急诊/神经内科' : '神经内科/眩晕专病门诊', careTimeframe: immediateCare ? '立即急诊' : target.riskLevel === 'high' ? '24 小时内' : '一周内', immediateCare, possibleDirections: [], dangerSignals: risk.dangerSignals, createdAt: now() });
       return target;
     });
 
-    let assistantContent; let modelMeta = null;
+    let assistantContent; let modelMeta = null; let modelTurn = null;
     if (consultation.dangerSignals.length) {
       assistantContent = '你的描述中包含需要立即关注的危险信号。请停止自行活动，立即前往急诊或呼叫 120，不要独自驾车，建议由家人陪同。';
     } else {
       const data = store.snapshot(['messages', 'modelConfigs']);
       const context = data.messages.filter((item) => item.consultationId === consultation.id).map(({ role, content: text }) => ({ role, content: text }));
       const pinnedConfig = data.modelConfigs.find((item) => item.id === consultation.modelConfigId) || null;
-      try { modelMeta = await callMedicalModel(context, undefined, pinnedConfig); assistantContent = modelMeta.content; }
-      catch (error) { assistantContent = error.message || '智能问诊服务暂时不可用，已保留您的描述。'; modelMeta = { error: error.code || 'MODEL_UNAVAILABLE', latencyMs: error.latencyMs || 0, model: process.env.MEDCHAT_MODEL || 'deepseek-v4-pro' }; }
+      try {
+        const structured = await callPatientTurn(context, pinnedConfig);
+        modelTurn = structured.turn;
+        modelMeta = { latencyMs: structured.latencyMs, model: structured.model };
+        assistantContent = structured.turn.question;
+      } catch (error) {
+        assistantContent = `${error.message || '智能问诊服务暂时不可用'} 已保存你的描述，建议稍后重试或直接咨询医生。`;
+        modelMeta = { error: error.code || 'MODEL_UNAVAILABLE', latencyMs: error.latencyMs || 0, model: error.model || process.env.MEDCHAT_MODEL || 'deepseek-v4-pro' };
+        modelTurn = { riskLevel: 'medium', dangerSignals: [], possibleDirections: [], recommendedDepartment: '眩晕专病门诊', careTimeframe: '一周内就医', immediateCare: false, readyToComplete: false, collectedFields: [] };
+      }
     }
-    const result = await store.transaction(['messages', 'modelCalls', 'audits'], (data) => {
+    const result = await store.transaction(['consultations', 'messages', 'riskAssessments', 'modelCalls', 'audits'], (data) => {
+      const target = data.consultations.find((item) => item.id === consultation.id);
+      const modelRiskLevel = modelTurn?.riskLevel || null;
+      target.dangerSignals = [...new Set([...(target.dangerSignals || []), ...(modelTurn?.dangerSignals || [])])];
+      target.riskLevel = higherRisk(target.riskLevel, modelRiskLevel || 'low');
+      if (target.dangerSignals.length) target.riskLevel = 'emergency';
+      target.collectedFields = [...new Set([...(target.collectedFields || []), ...(modelTurn?.collectedFields || [])])];
+      target.readyToComplete = Boolean(modelTurn?.readyToComplete);
+      const care = careByRisk[target.riskLevel];
+      const recommendedDepartment = target.riskLevel === 'emergency' ? '急诊/神经内科' : modelTurn?.recommendedDepartment || '神经内科/眩晕专病门诊';
+      if (target.riskLevel === 'emergency') assistantContent = '你的描述中包含需要立即关注的危险信号。请停止自行活动，立即前往急诊或呼叫 120，不要独自驾车，建议由家人陪同。';
+      else if (target.riskLevel === 'high') assistantContent = `当前信息提示较高风险，建议 24 小时内前往${recommendedDepartment}就医评估。你可以继续补充信息，但不要延误就医。`;
+      const assessment = { id: createId('rsk'), consultationId: target.id, ruleRiskLevel: risk.riskLevel, modelRiskLevel, finalRiskLevel: target.riskLevel, recommendedDepartment, careTimeframe: care.careTimeframe, immediateCare: care.immediateCare, possibleDirections: modelTurn?.possibleDirections || [], dangerSignals: target.dangerSignals, createdAt: now() };
+      data.riskAssessments.push(assessment);
       const message = { id: createId('msg'), consultationId: consultation.id, role: 'assistant', content: assistantContent, createdAt: now(), model: modelMeta?.model || null };
       data.messages.push(message);
       if (modelMeta) data.modelCalls.push({ id: createId('call'), consultationId: consultation.id, userId: req.user.id, model: modelMeta.model, success: !modelMeta.error, error: modelMeta.error || null, latencyMs: modelMeta.latencyMs, createdAt: now() });
-      data.audits.push(auditEntry(req.user, 'consultation_message', 'consultation', consultation.id, `提交问诊消息，规则风险等级 ${consultation.riskLevel}`));
-      return message;
+      data.audits.push(auditEntry(req.user, 'consultation_message', 'consultation', consultation.id, `提交问诊消息，最终风险等级 ${target.riskLevel}`));
+      return { message, consultation: target, assessment };
     });
-    res.json({ message: result, riskLevel: consultation.riskLevel, dangerSignals: consultation.dangerSignals });
+    res.json({ message: result.message, consultation: result.consultation, triage: result.assessment, riskLevel: result.consultation.riskLevel, dangerSignals: result.consultation.dangerSignals });
   }));
 
-  router.post('/consultations/:id/complete', requireRole('patient'), asyncRoute(async (req, res) => {
-    const data = store.snapshot(['consultations', 'reports', 'messages']);
+  router.post('/consultations/:id/complete', serializeConsultation, requireRole('patient'), asyncRoute(async (req, res) => {
+    const data = store.snapshot(['consultations', 'reports', 'messages', 'modelConfigs']);
     const consultation = data.consultations.find((item) => item.id === req.params.id && item.patientId === req.user.id);
     if (!consultation) throw httpError(404, 'NOT_FOUND', '问诊会话不存在');
     const existing = data.reports.find((item) => item.consultationId === consultation.id);
     if (existing) return res.json({ report: existing });
-    const reportFields = buildReport(consultation, data.messages.filter((item) => item.consultationId === consultation.id));
-    const report = await store.transaction(['consultations', 'reports', 'audits'], (draft) => {
+    if (consultation.status !== 'in_progress') throw httpError(409, 'CONSULTATION_CLOSED', '该问诊已经结束');
+    const messages = data.messages.filter((item) => item.consultationId === consultation.id);
+    const userMessages = messages.filter((item) => item.role === 'user');
+    if (userMessages.length < 3 && !(consultation.dangerSignals || []).length) throw httpError(409, 'INSUFFICIENT_INFORMATION', '当前信息不足，请至少完成三轮症状采集后再生成报告');
+    const pinnedConfig = data.modelConfigs.find((item) => item.id === consultation.modelConfigId) || null;
+    let generated; let modelMeta;
+    try {
+      const structured = await callPatientReport({ consultation, messages }, pinnedConfig);
+      generated = structured.report;
+      modelMeta = { model: structured.model, latencyMs: structured.latencyMs };
+    } catch (error) {
+      generated = buildReport(consultation, messages);
+      modelMeta = { model: error.model || process.env.MEDCHAT_MODEL || 'deepseek-v4-pro', latencyMs: error.latencyMs || 0, error: error.code || 'MODEL_UNAVAILABLE' };
+    }
+    const reportFields = normalizeReportRisk(generated, consultation);
+    const report = await store.transaction(['consultations', 'reports', 'modelCalls', 'audits'], (draft) => {
       const target = draft.consultations.find((item) => item.id === consultation.id);
       target.status = 'report_generated'; target.endedAt = now();
       const created = { id: createId('rpt'), consultationId: target.id, patientId: req.user.id, ...reportFields, createdAt: now() };
-      draft.reports.push(created); draft.audits.push(auditEntry(req.user, 'report_generated', 'report', created.id, '问诊结束并生成结构化报告'));
+      draft.reports.push(created);
+      draft.modelCalls.push({ id: createId('call'), consultationId: target.id, userId: req.user.id, model: modelMeta.model, success: !modelMeta.error, error: modelMeta.error || null, latencyMs: modelMeta.latencyMs, createdAt: now() });
+      draft.audits.push(auditEntry(req.user, 'report_generated', 'report', created.id, `问诊结束并生成${created.generationSource === 'model' ? '模型结构化' : '保守降级'}报告`));
       return created;
     });
     res.status(201).json({ report });

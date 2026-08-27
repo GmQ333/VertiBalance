@@ -4,6 +4,20 @@ const MEDICAL_GUARDRAIL = `你是眩衡平台的眩晕专病预问诊助手。�
 如发现突发严重头痛、言语不清、单侧肢体无力或麻木、复视、意识异常、无法站立行走等危险信号，必须明确建议立即前往急诊或呼叫 120，并停止普通健康建议。
 禁止使用“已确诊、可以排除、一定没问题、无需就医、绝对安全”等确定性表述。始终注明内容仅供辅助筛查。`;
 
+const PATIENT_TURN_PROMPT = `${MEDICAL_GUARDRAIL}
+只输出 JSON，不要输出 Markdown。字段必须为：
+question（下一条给患者的简短追问或安全提示）、riskLevel（low/medium/high/emergency）、dangerSignals（字符串数组）、possibleDirections（字符串数组）、recommendedDepartment（字符串）、careTimeframe（字符串）、immediateCare（布尔值）、readyToComplete（布尔值）、collectedFields（字符串数组）。
+collectedFields 只能使用 symptom、onset、duration、trigger、associated、danger、history、medication。
+信息不足时继续追问且 readyToComplete=false。禁止输出确定性诊断。`;
+
+const PATIENT_REPORT_PROMPT = `${MEDICAL_GUARDRAIL}
+请将完整问诊整理为患者可读的结构化报告。只输出 JSON，不要输出 Markdown。字段必须为：
+chiefComplaint、episodeFeatures、triggers、accompanyingSymptoms、history、medications、aiRiskNote、recommendedDepartment、careTimeframe（字符串），dangerSignals、possibleDirections（字符串数组），riskLevel（low/medium/high/emergency），immediateCare（布尔值）。
+缺失信息填写“未采集”，疾病方向必须使用“可能涉及/需进一步评估”等非确定性表述。`;
+
+const riskLevels = new Set(['low', 'medium', 'high', 'emergency']);
+const collectedFieldNames = new Set(['symptom', 'onset', 'duration', 'trigger', 'associated', 'danger', 'history', 'medication']);
+
 let runtimeModelConfig = null;
 export function configureRuntimeModel(config) { runtimeModelConfig = config || null; }
 
@@ -108,6 +122,77 @@ export async function callMedicalModel(messages, systemPrompt = MEDICAL_GUARDRAI
   } finally { clearTimeout(timeout); }
 }
 
+function parseModelJson(content) {
+  return JSON.parse(content.replace(/^```json\s*|\s*```$/g, '').trim());
+}
+
+function invalidStructuredResponse(result, message) {
+  const error = new Error(message);
+  error.code = 'INVALID_MODEL_RESPONSE';
+  error.latencyMs = result.latencyMs;
+  error.model = result.model;
+  return error;
+}
+
+function safeText(value, fallback = '未采集') {
+  return redactUnsafeClaims(typeof value === 'string' && value.trim() ? value.trim() : fallback);
+}
+
+function safeTextArray(value) {
+  return Array.isArray(value) ? value.filter((item) => typeof item === 'string' && item.trim()).map((item) => safeText(item.trim())).slice(0, 12) : [];
+}
+
+export async function callPatientTurn(messages, pinnedConfig = null) {
+  const result = await callMedicalModel(messages, PATIENT_TURN_PROMPT, pinnedConfig);
+  let parsed;
+  try { parsed = parseModelJson(result.content); }
+  catch { throw invalidStructuredResponse(result, '智能问诊返回结构异常，请稍后重试。'); }
+  if (!parsed || typeof parsed !== 'object' || !riskLevels.has(parsed.riskLevel) || typeof parsed.question !== 'string' || typeof parsed.immediateCare !== 'boolean' || typeof parsed.readyToComplete !== 'boolean') {
+    throw invalidStructuredResponse(result, '智能问诊返回字段不完整，请稍后重试。');
+  }
+  return {
+    ...result,
+    turn: {
+      question: safeText(parsed.question, '请继续描述症状变化。'),
+      riskLevel: parsed.riskLevel,
+      dangerSignals: safeTextArray(parsed.dangerSignals),
+      possibleDirections: safeTextArray(parsed.possibleDirections),
+      recommendedDepartment: safeText(parsed.recommendedDepartment, '眩晕专病门诊'),
+      careTimeframe: safeText(parsed.careTimeframe, '建议咨询医生'),
+      immediateCare: parsed.immediateCare,
+      readyToComplete: parsed.readyToComplete,
+      collectedFields: Array.isArray(parsed.collectedFields) ? [...new Set(parsed.collectedFields.filter((item) => collectedFieldNames.has(item)))] : [],
+    },
+  };
+}
+
+export async function callPatientReport({ consultation, messages }, pinnedConfig = null) {
+  const payload = JSON.stringify({
+    riskLevel: consultation.riskLevel,
+    dangerSignals: consultation.dangerSignals,
+    conversation: messages.map(({ role, content }) => ({ role, content })),
+  });
+  const result = await callMedicalModel([{ role: 'user', content: payload }], PATIENT_REPORT_PROMPT, pinnedConfig);
+  let parsed;
+  try { parsed = parseModelJson(result.content); }
+  catch { throw invalidStructuredResponse(result, '问诊报告结构异常，已改用保守报告。'); }
+  const requiredStrings = ['chiefComplaint', 'episodeFeatures', 'triggers', 'accompanyingSymptoms', 'history', 'medications', 'aiRiskNote', 'recommendedDepartment', 'careTimeframe'];
+  if (!parsed || typeof parsed !== 'object' || !riskLevels.has(parsed.riskLevel) || !requiredStrings.every((key) => typeof parsed[key] === 'string') || typeof parsed.immediateCare !== 'boolean') {
+    throw invalidStructuredResponse(result, '问诊报告字段不完整，已改用保守报告。');
+  }
+  return {
+    ...result,
+    report: {
+      ...Object.fromEntries(requiredStrings.map((key) => [key, safeText(parsed[key])])),
+      dangerSignals: safeTextArray(parsed.dangerSignals),
+      possibleDirections: safeTextArray(parsed.possibleDirections),
+      riskLevel: parsed.riskLevel,
+      immediateCare: parsed.immediateCare,
+      generationSource: 'model',
+    },
+  };
+}
+
 export async function callDoctorAnalysis({ report, messages }) {
   const prompt = `你是眩晕专病临床辅助分析助手，使用中文为已认证医生整理资料。只能提供参考方向，不能替医生作最终判断。
 输出严格 JSON，不要 Markdown，字段必须为：symptomHighlights（字符串数组）、followupQuestions（字符串数组）、differentialDirections（字符串数组且必须使用“可能/需鉴别”表述）、dangerSignals（字符串数组）、suggestedExams（字符串数组）、structuredSummary（字符串）。
@@ -139,8 +224,12 @@ export function buildReport(consultation, messages) {
     dangerSignals: signals,
     history: /高血压|糖尿病|房颤|脑卒中/.test(userText) ? '描述中提及高危基础疾病，详见原始对话' : '未采集或未提及',
     medications: /用药|药/.test(userText) ? '描述中提及用药，详见原始对话' : '未采集',
+    possibleDirections: signals.length ? ['可能涉及中枢性眩晕方向，需急诊进一步评估'] : positional ? ['可能涉及位置性眩晕方向'] : hearing ? ['可能涉及外周前庭性眩晕方向'] : ['疾病方向待医生进一步评估'],
     aiRiskNote: signals.length ? '存在需要紧急关注的危险信号，建议立即急诊评估。' : '当前信息未识别到明确危险信号，但仍建议由医生结合查体进一步判断。',
     recommendedDepartment: signals.length ? '急诊/神经内科' : positional || hearing ? '耳鼻喉科/眩晕专病门诊' : '神经内科/眩晕专病门诊',
     riskLevel,
+    careTimeframe: riskLevel === 'emergency' ? '立即急诊或呼叫 120' : riskLevel === 'high' ? '24 小时内就医' : riskLevel === 'medium' ? '一周内就医' : '按需就医并留意变化',
+    immediateCare: riskLevel === 'emergency',
+    generationSource: 'fallback',
   };
 }
