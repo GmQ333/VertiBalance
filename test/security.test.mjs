@@ -33,6 +33,19 @@ test('administrator-configured risk keywords take effect immediately', () => {
   assert.deepEqual(risk.dangerSignals, ['吞咽困难']);
 });
 
+test('danger and history rules ignore explicitly negated symptoms', () => {
+  const negated = screenRisk('我没有说话不清，无复视，也没有高血压，但有一点头晕');
+  assert.equal(negated.riskLevel, 'medium');
+  assert.deepEqual(negated.dangerSignals, []);
+
+  const mixed = screenRisk('我没有高血压，但突然说话不清');
+  assert.equal(mixed.riskLevel, 'emergency');
+  assert.deepEqual(mixed.dangerSignals, ['言语不清']);
+
+  const custom = screenRisk('没有喝水呛咳', [{ label: '吞咽困难', keywords: ['喝水呛咳'], enabled: true }]);
+  assert.deepEqual(custom.dangerSignals, []);
+});
+
 test('report generation preserves risk signals and non-diagnostic wording', () => {
   const report = buildReport({ riskLevel: 'emergency', dangerSignals: ['无法站立或行走'] }, [{ role: 'user', content: '突然旋转，无法站立，伴恶心' }]);
   assert.equal(report.riskLevel, 'emergency');

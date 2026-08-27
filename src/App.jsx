@@ -12,11 +12,6 @@ import { api, getAuthToken, setAuthToken } from './api/client';
 
 const DISCLAIMER = '本系统仅用于辅助筛查和健康信息参考，不能替代医生面诊和临床诊断。';
 const ROLE_LABELS = { patient: '患者端', doctor: '医生端', admin: '管理端' };
-const dangerPatterns = [
-  /言语不清|说话不清|口角歪/, /单侧.*(无力|麻木|没.{0,2}力)|一边.*(无力|麻木|没.{0,2}力)/, /复视|看东西重影/,
-  /意识.*(不清|异常)|昏迷|晕厥/, /无法.*(站立|行走)|站不起来|走不了/, /突发.*严重.*头痛|剧烈头痛/,
-];
-
 const patientNav = [
   ['overview', LayoutDashboard, '健康首页'], ['consult', MessageCircleMore, '智能问诊'],
   ['reports', FileText, '问诊报告'], ['appointments', CalendarDays, '我的挂号'],
@@ -150,7 +145,7 @@ function LivePatientOverview({ setActive, user }) {
 }
 
 function RiskNotice({ emergency }) {
-  return emergency ? <div className="emergency-card"><div className="emergency-icon"><AlertTriangle size={25}/></div><div><strong>检测到需要紧急关注的危险信号</strong><p>请停止自行活动，尽快前往急诊或立即呼叫 120。不要独自驾车，建议由家人陪同。</p></div><button onClick={() => window.alert('请立即拨打 120 或当地急救电话')}>急救指引</button></div> : null;
+  return emergency ? <div className="emergency-card"><div className="emergency-icon"><AlertTriangle size={25}/></div><div><strong>检测到需要紧急关注的危险信号</strong><p>请停止自行活动，立即前往急诊或呼叫 120。不要独自驾车；你仍可在下方补充信息，但不要因此延误就医。</p></div><button onClick={() => window.alert('请立即拨打 120 或当地急救电话，并请家人陪同。')}>急救指引</button></div> : null;
 }
 
 function Consultation({ onReport }) {
@@ -177,10 +172,8 @@ function Consultation({ onReport }) {
   async function sendMessage(text = input) {
     const content = text.trim();
     if (!content || loading || !consultationId) return;
-    const hasDanger = dangerPatterns.some((rule) => rule.test(content));
     const next = [...messages, { role: 'user', content }];
     setMessages(next); setInput('');
-    if (hasDanger) setEmergency(true);
     setLoading(true);
     try {
       const data = await api.sendConsultationMessage(consultationId, content);
@@ -215,11 +208,11 @@ function Consultation({ onReport }) {
           {loading && <div className="message-row assistant"><div className="mini-ai"><Sparkles size={15}/></div><div className="bubble typing"><i/><i/><i/></div></div>}
           <div ref={scrollRef}/>
         </div>
-        {!emergency && <div className="composer-wrap">
-          <div className="quick-prompts">{quickPrompts.map((item) => <button key={item} onClick={() => sendMessage(item)}>{item}</button>)}</div>
+        <div className={`composer-wrap ${emergency ? 'emergency-mode' : ''}`}>
+          {!emergency && <div className="quick-prompts">{quickPrompts.map((item) => <button key={item} onClick={() => sendMessage(item)}>{item}</button>)}</div>}
           <div className="composer"><textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); } }} placeholder="请描述你的感受…" rows="1"/><button disabled={!input.trim() || loading} onClick={() => sendMessage()}><Send size={18}/></button></div>
-          <p><LockKeyhole size={13}/>你的问诊内容将被加密保护，仅在挂号确认后移交医生</p>
-        </div>}
+          <p>{emergency ? <><AlertTriangle size={13}/>补充信息不能替代急诊处置，请立即就医</> : <><LockKeyhole size={13}/>你的问诊内容将被加密保护，仅在挂号确认后移交医生</>}</p>
+        </div>
       </section>
       <aside className="consult-side">
         <div className="side-card"><div className="side-title"><span>本次问诊</span><em>自动保存</em></div><div className="session-id">问诊编号 <b>{consultationId ? consultationId.slice(-12).toUpperCase() : '创建中…'}</b></div>
@@ -268,14 +261,18 @@ function LivePatientReport({ setActive, latestReport }) {
   const report = reports.find((item) => item.id === selectedId) || reports[0];
   if (loading && !report) return <DataLoading label="正在读取加密问诊报告…"/>;
   if (!report) return <EmptyState icon={FileText} title="暂无问诊报告" message={error || '完成一次智能问诊后，结构化报告会保存在这里。'} action="开始智能问诊" onAction={() => setActive('consult')}/>;
-  const risk = report.riskLevel === 'emergency' || report.riskLevel === 'high' ? '高' : report.riskLevel === 'low' ? '低' : '中';
-  const timing = risk === '高' ? '建议立即或 24 小时内就医' : risk === '中' ? '建议一周内就医' : '建议按需就医';
+  const riskMeta = {
+    emergency: { label: '紧急', timing: '立即急诊或呼叫 120', tone: 'emergency' },
+    high: { label: '高', timing: '24 小时内就医', tone: 'high' },
+    medium: { label: '中', timing: '一周内就医', tone: 'moderate' },
+    low: { label: '低', timing: '按需就医并留意变化', tone: 'low' },
+  }[report.riskLevel] || { label: '待评估', timing: '建议咨询医生', tone: 'moderate' };
   return <div className="page narrow-page"><button className="back-button" onClick={() => setActive('overview')}><ArrowLeft size={17}/>返回健康首页</button>
     <div className="report-toolbar"><label>历史报告<select value={report.id} onChange={(event) => setSelectedId(event.target.value)}>{reports.map((item) => <option key={item.id} value={item.id}>{new Date(item.createdAt).toLocaleString('zh-CN')} · {item.id.slice(-8)}</option>)}</select></label></div>
-    <div className="report-heading"><div><span className="eyebrow"><FileText size={15}/>AI 预问诊报告</span><h1>眩晕症状初步评估</h1><p>问诊编号 {report.consultationId.slice(-12).toUpperCase()} · {new Date(report.createdAt).toLocaleString('zh-CN')}</p></div><div className={`risk-seal ${risk === '高' ? 'high' : 'moderate'}`}><span>风险等级</span><strong>{risk}</strong><small>{timing}</small></div></div>
+    <div className="report-heading"><div><span className="eyebrow"><FileText size={15}/>AI 预问诊报告</span><h1>眩晕症状初步评估</h1><p>问诊编号 {report.consultationId.slice(-12).toUpperCase()} · {new Date(report.createdAt).toLocaleString('zh-CN')}</p></div><div className={`risk-seal ${riskMeta.tone}`}><span>风险等级</span><strong>{riskMeta.label}</strong><small>{riskMeta.timing}</small></div></div>
     <div className="report-notice"><ShieldCheck size={19}/><div><strong>这不是一份诊断书</strong><p>报告用于帮助你与医生更高效地沟通，具体诊断和治疗方案需由医生面诊后决定。</p></div></div>
     <div className="report-grid"><section className="panel report-main"><h2>症状摘要</h2><p className="summary-text">{report.chiefComplaint}</p><div className="fact-grid"><div><span>发作特点</span><strong>{report.episodeFeatures}</strong></div><div><span>主要诱因</span><strong>{report.triggers}</strong></div><div><span>伴随症状</span><strong>{report.accompanyingSymptoms}</strong></div><div><span>危险信号</span><strong className={report.dangerSignals.length ? 'danger-text' : 'safe-text'}>{report.dangerSignals.length ? <AlertTriangle size={15}/> : <Check size={15}/>} {report.dangerSignals.join('、') || '暂未识别'}</strong></div></div><h2>AI 初步风险提示</h2><div className="direction-card"><div><Brain size={22}/></div><div><strong>{report.recommendedDepartment}</strong><p>{report.aiRiskNote}</p></div></div></section>
-      <aside><div className="panel recommendation"><span className="tag">就医建议</span><h3>{risk === '高' ? '建议立即前往急诊评估' : `建议预约${report.recommendedDepartment}`}</h3><div><Hospital size={17}/><p><span>推荐科室</span><strong>{report.recommendedDepartment}</strong></p></div><div><Clock3 size={17}/><p><span>建议时效</span><strong>{timing.replace('建议','')}</strong></p></div><button className="primary-button" onClick={() => setActive('appointments')}>查看可约医生<ArrowRight size={17}/></button></div><button className="download-card" onClick={() => window.print()}><FileText size={20}/><div><strong>保存报告</strong><span>打印或导出为 PDF</span></div><ChevronRight size={18}/></button></aside></div>
+      <aside><div className="panel recommendation"><span className="tag">就医建议</span><h3>{report.riskLevel === 'emergency' ? '请立即前往急诊或呼叫 120' : report.riskLevel === 'high' ? '建议 24 小时内就医评估' : `建议预约${report.recommendedDepartment}`}</h3><div><Hospital size={17}/><p><span>推荐科室</span><strong>{report.recommendedDepartment}</strong></p></div><div><Clock3 size={17}/><p><span>建议时效</span><strong>{riskMeta.timing}</strong></p></div><button className="primary-button" onClick={() => setActive('appointments')}>查看可约医生<ArrowRight size={17}/></button></div><button className="download-card" onClick={() => window.print()}><FileText size={20}/><div><strong>保存报告</strong><span>打印或导出为 PDF</span></div><ChevronRight size={18}/></button></aside></div>
   </div>;
 }
 
