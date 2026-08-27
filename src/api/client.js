@@ -45,7 +45,7 @@ export const api = {
   cancelBooking: (id) => apiRequest(`/bookings/${id}/cancel`, { method: 'PATCH', body: {} }),
   followups: () => apiRequest('/followups'),
   submitFollowup: (id, body) => apiRequest(`/followups/${id}/feedback`, { method: 'POST', body }),
-  knowledge: () => apiRequest('/knowledge'),
+  knowledge: (category = '') => apiRequest(`/knowledge${category ? `?category=${encodeURIComponent(category)}` : ''}`),
   uploads: () => apiRequest('/uploads'),
   upload: (formData) => apiRequest('/uploads', { method: 'POST', body: formData }),
   doctorWorkbench: () => apiRequest('/doctor/workbench'),

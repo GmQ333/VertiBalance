@@ -152,10 +152,13 @@ test('GET /followups and POST /followups/:id/feedback maintain patient ownership
   assert.equal(list.response.status, 200);
   const task = list.data.followups.find((item) => item.status === 'pending');
   assert.ok(task);
-  const submitted = await context.request(`/followups/${task.id}/feedback`, { token: patient.token, method: 'POST', body: { severity: 8, text: '仍有明显不适', medicationTaken: true } });
+  const submitted = await context.request(`/followups/${task.id}/feedback`, { token: patient.token, method: 'POST', body: { severity: 8, frequency: 4, text: '仍有明显不适', medicationTaken: true } });
   assert.equal(submitted.response.status, 200);
   assert.equal(submitted.data.followup.status, 'completed');
   assert.equal(submitted.data.followup.abnormal, true);
+  assert.equal(submitted.data.followup.feedback.frequency, 4);
+  const duplicate = await context.request(`/followups/${task.id}/feedback`, { token: patient.token, method: 'POST', body: { severity: 2, frequency: 0, text: '重复提交' } });
+  assert.equal(duplicate.response.status, 409);
   const foreign = await context.request(`/followups/${task.id}/feedback`, { token: otherPatient.token, method: 'POST', body: { severity: 2, text: '越权' } });
   assert.equal(foreign.response.status, 404);
 });
