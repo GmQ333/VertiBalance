@@ -6,7 +6,7 @@ import {
   LockKeyhole, Menu, MessageCircleMore, MoreHorizontal, Network, Plus, Search, Send, Settings,
   ShieldCheck, Sparkles, Stethoscope, TableProperties, Users, UserRound, UserRoundCog, X, Zap,
 } from 'lucide-react';
-import { auditRows, followups, patients } from './data';
+import { auditRows, patients } from './data';
 import Login from './Login';
 import { api, getAuthToken, setAuthToken } from './api/client';
 import Consultation from './patient/Consultation';
@@ -112,33 +112,6 @@ function StatCard({ icon: Icon, tone, label, value, detail, trend }) {
   </div>;
 }
 
-function PatientOverview({ setActive }) {
-  return <div className="page patient-home">
-    <section className="patient-hero">
-      <div className="hero-copy"><span className="eyebrow"><Sparkles size={15} />AI 眩晕专病助手</span><h1>上午好，苏晴</h1><p>今天感觉怎么样？如果出现眩晕、头昏或失衡，眩衡助手可以帮你梳理症状并评估就医紧迫程度。</p>
-        <div className="hero-actions"><button className="primary-button" onClick={() => setActive('consult')}><MessageCircleMore size={18} />开始智能问诊<ArrowRight size={17} /></button><button className="soft-button" onClick={() => setActive('reports')}><FileText size={18} />查看历史报告</button></div>
-      </div>
-      <div className="hero-visual" aria-hidden="true"><div className="orbit orbit-one"/><div className="orbit orbit-two"/><div className="hero-pulse"><Activity size={38} /></div><span className="spark s1"/><span className="spark s2"/><span className="spark s3"/></div>
-    </section>
-    <div className="quick-grid">
-      <button className="quick-card indigo" onClick={() => setActive('consult')}><span><MessageCircleMore size={21} /></span><div><strong>症状不舒服？</strong><p>与 AI 助手进行专业预问诊</p></div><ChevronRight size={20} /></button>
-      <button className="quick-card mint" onClick={() => setActive('appointments')}><span><CalendarDays size={21} /></span><div><strong>预约专科医生</strong><p>查看推荐医生与可约时段</p></div><ChevronRight size={20} /></button>
-      <button className="quick-card amber" onClick={() => setActive('education')}><span><BookOpen size={21} /></span><div><strong>了解眩晕知识</strong><p>专业、易懂的疾病科普</p></div><ChevronRight size={20} /></button>
-    </div>
-    <div className="two-column">
-      <section className="panel"><div className="section-heading"><div><h2>我的健康进程</h2><p>持续记录，有助于医生了解你的恢复情况</p></div><button className="text-button" onClick={() => setActive('followup')}>查看全部<ChevronRight size={15}/></button></div>
-        <div className="timeline-list">
-          <div className="timeline-row"><div className="timeline-date"><b>23</b><span>八月</span></div><i className="done"><Check size={13}/></i><div><strong>完成首次智能问诊</strong><span>生成中风险评估报告 · 已推荐神经内科</span></div><em>已完成</em></div>
-          <div className="timeline-row"><div className="timeline-date"><b>24</b><span>八月</span></div><i className="current"><CalendarDays size={13}/></i><div><strong>张明远医生 · 专科门诊</strong><span>眩晕与平衡障碍门诊 · 门诊楼 3F</span></div><em className="upcoming">明天 09:30</em></div>
-          <div className="timeline-row"><div className="timeline-date"><b>26</b><span>八月</span></div><i><ClipboardCheck size={13}/></i><div><strong>诊后恢复随访</strong><span>完成症状变化与用药情况问卷</span></div><em>待开始</em></div>
-        </div>
-      </section>
-      <section className="panel knowledge-preview"><div className="section-heading"><div><h2>为你推荐</h2><p>了解症状，也能减少不必要的担忧</p></div></div>
-        <div className="article-feature"><div className="article-art"><div className="ear-shape">◌</div></div><div><span className="tag">就医准备</span><h3>眩晕就诊前，需要准备哪些信息？</h3><p>记住这 5 个要点，帮助医生更快了解你的情况。</p><button className="text-button">阅读 4 分钟<ArrowRight size={15}/></button></div></div>
-      </section>
-    </div>
-  </div>;
-}
 
 function LivePatientOverview({ setActive, user }) {
   const [data,setData]=useState(null);useEffect(()=>{api.patientDashboard().then(setData);},[]);
@@ -146,32 +119,6 @@ function LivePatientOverview({ setActive, user }) {
 }
 
 
-function PatientReport({ setActive }) {
-  return <div className="page narrow-page">
-    <button className="back-button" onClick={() => setActive('overview')}><ArrowLeft size={17}/>返回健康首页</button>
-    <div className="report-heading"><div><span className="eyebrow"><FileText size={15}/>AI 预问诊报告</span><h1>眩晕症状初步评估</h1><p>问诊编号 VB-0824-0931 · 生成于今天 14:32</p></div><div className="risk-seal moderate"><span>风险等级</span><strong>中</strong><small>建议一周内就医</small></div></div>
-    <div className="report-notice"><ShieldCheck size={19}/><div><strong>这不是一份诊断书</strong><p>报告用于帮助你与医生更高效地沟通，具体诊断和治疗方案需由医生面诊后决定。</p></div></div>
-    <div className="report-grid">
-      <section className="panel report-main"><h2>症状摘要</h2><p className="summary-text">近 3 天晨起或翻身时出现短暂旋转感，每次约 20–30 秒，伴轻度恶心，无明显听力下降。当前描述中未发现明确的神经系统危险信号。</p><div className="fact-grid"><div><span>发作特点</span><strong>短暂、反复发作</strong></div><div><span>主要诱因</span><strong>翻身、起床、转头</strong></div><div><span>伴随症状</span><strong>轻度恶心</strong></div><div><span>危险信号</span><strong className="safe-text"><Check size={15}/>暂未识别</strong></div></div><h2>可能涉及的方向</h2><div className="direction-card"><div><Brain size={22}/></div><div><strong>位置性眩晕相关方向</strong><p>症状特点可能与体位变化相关，建议由耳鼻喉科或眩晕专病门诊进一步检查评估。</p></div></div></section>
-      <aside><div className="panel recommendation"><span className="tag">就医建议</span><h3>建议预约眩晕专病门诊</h3><div><Hospital size={17}/><p><span>推荐科室</span><strong>耳鼻喉科 · 眩晕门诊</strong></p></div><div><Clock3 size={17}/><p><span>建议时效</span><strong>一周内</strong></p></div><button className="primary-button" onClick={() => setActive('appointments')}>查看可约医生<ArrowRight size={17}/></button></div><button className="download-card" onClick={() => window.print()}><FileText size={20}/><div><strong>保存报告</strong><span>打印或导出为 PDF</span></div><ChevronRight size={18}/></button></aside>
-    </div>
-  </div>;
-}
-
-function PatientSubPage({ active, setActive }) {
-  if (active === 'reports') return <PatientReport setActive={setActive}/>;
-  const configs = {
-    appointments: ['我的挂号', '查看预约信息和医生安排', CalendarDays],
-    followup: ['康复随访', '记录恢复变化，按时完成随访任务', Activity],
-    education: ['眩晕健康科普', '来自专业知识库的可靠健康内容', BookOpen],
-  };
-  const [title, subtitle, Icon] = configs[active] || configs.followup;
-  return <div className="page"><div className="page-title"><div><span className="eyebrow"><Icon size={15}/>患者健康服务</span><h1>{title}</h1><p>{subtitle}</p></div>{active === 'appointments' && <button className="primary-button"><Plus size={17}/>预约医生</button>}</div>
-    {active === 'appointments' ? <div className="appointment-card"><div className="appointment-date"><span>明天</span><strong>09:30</strong><small>8 月 25 日</small></div><div className="appointment-doctor"><div className="avatar large">张</div><div><span className="tag">已确认</span><h3>张明远 · 主任医师</h3><p>眩晕与平衡障碍门诊 · 神经内科</p></div></div><div className="appointment-place"><Hospital size={18}/><div><span>滨江院区 · 门诊楼 3F</span><small>请提前 15 分钟签到</small></div></div><button className="outline-button">查看详情</button></div>
-    : active === 'education' ? <div className="article-grid">{[['体位一变就眩晕，可能发生了什么？','耳石症','6 分钟'],['眩晕发作时，如何避免跌倒？','日常防护','4 分钟'],['前庭康复训练的正确打开方式','康复训练','8 分钟'],['什么样的头晕需要立即去急诊？','危险信号','5 分钟']].map(([name, tag, time], i) => <article key={name}><div className={`article-cover cover-${i+1}`}><BookOpen size={30}/></div><span className="tag">{tag}</span><h3>{name}</h3><p>用简单易懂的方式了解眩晕，做好科学应对和就医准备。</p><small>{time}阅读 <ArrowRight size={14}/></small></article>)}</div>
-    : <div className="followup-grid">{followups.map((item, index) => <div className="followup-card" key={item.title}><div className={`task-icon t${index}`}><ClipboardCheck size={20}/></div><div><span>{item.type} · {item.date}</span><h3>{item.title}</h3><p>按计划完成记录，异常变化会及时同步给你的医生。</p></div><em>{item.status}</em><button className={index === 0 ? 'primary-button' : 'outline-button'}>{index === 0 ? '开始填写' : '查看详情'}</button></div>)}</div>}
-  </div>;
-}
 
 function LivePatientReport({ setActive, latestReport }) {
   const [consultations, setConsultations] = useState([]);
@@ -475,7 +422,7 @@ function App() {
       if (active === 'followup') return <LiveFollowups/>;
       if (active === 'documents') return <PatientDocuments/>;
       if (active === 'education') return <LiveKnowledge/>;
-      return <PatientSubPage active={active} setActive={setActive}/>;
+      return <LivePatientOverview setActive={setActive} user={session.user}/>;
     }
     if (role === 'doctor') return <LiveDoctorApp active={active} user={session.user}/>;
     return <LiveAdminApp active={active} setActive={setActive}/>;
