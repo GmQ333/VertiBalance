@@ -42,7 +42,7 @@ function RoleDisplay({ role }) {
   </div>;
 }
 
-function ProfileMenu({ role, user, onLogout }) {
+function ProfileMenu({ role, user, onLogout, onProfile }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
   const subtitle = role === 'patient' ? '患者' : role === 'doctor' ? `${user.department || '临床科室'} · ${user.title || '医生'}` : '平台管理员';
@@ -60,20 +60,24 @@ function ProfileMenu({ role, user, onLogout }) {
     </button>
     {open && <div className="account-menu" role="menu">
       <div className="account-summary"><div className="avatar">{user.name.slice(0, 1)}</div><div><strong>{user.name}</strong><span>{user.account}</span></div></div>
+      {role === 'patient' && <button type="button" role="menuitem" onClick={onProfile}><Settings size={16}/><span>个人资料</span><ArrowRight size={14}/></button>}
       <button type="button" role="menuitem" onClick={onLogout}><CircleUserRound size={16}/><span>退出并切换账号</span><ArrowRight size={14}/></button>
       <small>如需使用其他身份，请退出后选择相应账号重新登录。</small>
     </div>}
   </div>;
 }
 
-function Shell({ role, user, onLogout, active, setActive, children }) {
+function Shell({ role, user, onLogout, onUserUpdate, active, setActive, children }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [notices, setNotices] = useState({ notifications: [], unread: 0 });
   const [feedbackOpen,setFeedbackOpen]=useState(false); const [feedback,setFeedback]=useState({rating:5,content:''}); const [feedbackMessage,setFeedbackMessage]=useState('');
+  const [profileOpen, setProfileOpen] = useState(false); const [profileForm, setProfileForm] = useState({ name: user.name || '', phone: user.phone || '', gender: user.gender || '未设置', age: user.age || '' }); const [profileMessage, setProfileMessage] = useState('');
+  useEffect(() => { setProfileForm({ name: user.name || '', phone: user.phone || '', gender: user.gender || '未设置', age: user.age || '' }); }, [user]);
   useEffect(() => { api.notifications().then(setNotices).catch(() => undefined); }, [active]);
   async function readNotice(item) { if (!item.read) { await api.readNotification(item.id); setNotices((current) => ({ notifications: current.notifications.map((entry) => entry.id === item.id ? { ...entry, read: true } : entry), unread: Math.max(0, current.unread - 1) })); } }
   async function submitFeedback(){try{await api.feedback(feedback);setFeedbackMessage('感谢反馈，我们已记录你的意见。');setFeedback({...feedback,content:''})}catch(error){setFeedbackMessage(error.message)}}
+  async function saveProfile(){setProfileMessage('');try{const result=await api.updateProfile({...profileForm,age:profileForm.age===''?null:Number(profileForm.age)});onUserUpdate(result.user);setProfileMessage('资料已更新');setTimeout(()=>setProfileOpen(false),500)}catch(error){setProfileMessage(error.message)}}
   const nav = role === 'patient' ? patientNav : role === 'doctor' ? doctorNav : adminNav;
   return <div className={`app-shell role-${role}`}>
     <aside className={`sidebar ${mobileOpen ? 'mobile-open' : ''}`}>
@@ -94,7 +98,7 @@ function Shell({ role, user, onLogout, active, setActive, children }) {
         <div className="top-actions">
           <RoleDisplay role={role} />
           <div className="notification-wrap"><button className="icon-button notification" aria-label="站内通知" onClick={() => setNoticeOpen(!noticeOpen)}><Bell size={19} />{notices.unread > 0 && <i />}</button>{noticeOpen && <div className="notification-panel"><div><strong>站内通知</strong><span>{notices.unread} 条未读</span></div>{notices.notifications.length ? notices.notifications.slice(0,8).map((item)=><button className={item.read?'read':''} key={item.id} onClick={()=>readNotice(item)}><i/><div><strong>{item.title}</strong><p>{item.content}</p><time>{new Date(item.createdAt).toLocaleString('zh-CN')}</time></div></button>) : <p className="empty-notice">暂无通知</p>}</div>}</div>
-          <ProfileMenu role={role} user={user} onLogout={onLogout}/>
+          <ProfileMenu role={role} user={user} onLogout={onLogout} onProfile={() => { setProfileOpen(true); setProfileMessage(''); }} />
         </div>
       </header>
       <main>{children}</main>
@@ -102,6 +106,7 @@ function Shell({ role, user, onLogout, active, setActive, children }) {
     </div>
     {mobileOpen && <div className="scrim" onClick={() => setMobileOpen(false)} />}
     {feedbackOpen&&<div className="modal-backdrop" onClick={()=>setFeedbackOpen(false)}><div className="knowledge-modal feedback-modal" onClick={(event)=>event.stopPropagation()}><button className="modal-close" onClick={()=>setFeedbackOpen(false)}><X size={19}/></button><span className="eyebrow"><HelpCircle size={15}/>平台反馈</span><h2>告诉我们哪里可以做得更好</h2><label>体验评分<select value={feedback.rating} onChange={(e)=>setFeedback({...feedback,rating:Number(e.target.value)})}><option value="5">5 分 · 很满意</option><option value="4">4 分 · 满意</option><option value="3">3 分 · 一般</option><option value="2">2 分 · 待改进</option><option value="1">1 分 · 不满意</option></select></label><label>反馈内容<textarea value={feedback.content} onChange={(e)=>setFeedback({...feedback,content:e.target.value})} placeholder="请勿在反馈中填写完整病历或敏感个人信息…"/></label>{feedbackMessage&&<div className="inline-feedback success">{feedbackMessage}</div>}<button className="primary-button full" onClick={submitFeedback}>提交反馈</button></div></div>}
+    {profileOpen && <div className="modal-backdrop" onClick={() => setProfileOpen(false)}><section className="knowledge-modal feedback-modal" role="dialog" aria-modal="true" aria-labelledby="profile-title" onClick={(event) => event.stopPropagation()}><button className="modal-close" aria-label="关闭个人资料" onClick={() => setProfileOpen(false)}><X size={19}/></button><span className="eyebrow"><Settings size={15}/>账户资料</span><h2 id="profile-title">完善个人资料</h2><label>姓名<input value={profileForm.name} onChange={(event) => setProfileForm({ ...profileForm, name: event.target.value })}/></label><label>手机号<input inputMode="numeric" value={profileForm.phone} onChange={(event) => setProfileForm({ ...profileForm, phone: event.target.value })}/></label><label>性别<select value={profileForm.gender} onChange={(event) => setProfileForm({ ...profileForm, gender: event.target.value })}><option>未设置</option><option>女</option><option>男</option></select></label><label>年龄<input type="number" min="1" max="120" value={profileForm.age} onChange={(event) => setProfileForm({ ...profileForm, age: event.target.value })}/></label>{profileMessage && <div className={`inline-feedback ${profileMessage.includes('更新') ? 'success' : ''}`}>{profileMessage}</div>}<button className="primary-button full" onClick={saveProfile}>保存资料</button></section></div>}
   </div>;
 }
 
@@ -427,7 +432,7 @@ function App() {
     if (role === 'doctor') return <LiveDoctorApp active={active} user={session.user}/>;
     return <LiveAdminApp active={active} setActive={setActive}/>;
   })();
-  return <Shell role={role} user={session.user} onLogout={logout} active={active} setActive={setActive}>{content}</Shell>;
+  return <Shell role={role} user={session.user} onLogout={logout} onUserUpdate={(user) => setSession((current) => ({ ...current, user }))} active={active} setActive={setActive}>{content}</Shell>;
 }
 
 export default App;

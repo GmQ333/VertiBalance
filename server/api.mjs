@@ -146,6 +146,25 @@ export function createApiRouter(store, options = {}) {
 
   router.get('/auth/me', authenticate, (req, res) => res.json({ user: publicUser(req.user) }));
 
+  router.patch('/auth/profile', authenticate, asyncRoute(async (req, res) => {
+    const name = String(req.body?.name || '').trim();
+    const phone = String(req.body?.phone || '').trim();
+    const gender = String(req.body?.gender || '').trim() || '未设置';
+    const age = req.body?.age === '' || req.body?.age == null ? null : Number(req.body.age);
+    if (name.length < 2 || name.length > 40) throw httpError(400, 'INVALID_NAME', '姓名长度应为 2 至 40 个字符');
+    if (!/^1\d{10}$/.test(phone)) throw httpError(400, 'INVALID_PHONE', '请输入有效的 11 位手机号');
+    if (age !== null && (!Number.isInteger(age) || age < 1 || age > 120)) throw httpError(400, 'INVALID_AGE', '年龄应为 1 至 120 的整数');
+    const updated = await store.transaction(['users', 'audits'], (data) => {
+      if (data.users.some((item) => item?.phone === phone && item?.id !== req.user.id)) throw httpError(409, 'PHONE_EXISTS', '该手机号已被其他账号使用');
+      const target = data.users.find((item) => item?.id === req.user.id);
+      if (!target) throw httpError(404, 'NOT_FOUND', '用户不存在');
+      target.name = name; target.phone = phone; target.gender = gender; target.age = age;
+      data.audits.push(auditEntry(target, 'profile_updated', 'user', target.id, '用户更新个人资料'));
+      return target;
+    });
+    res.json({ user: publicUser(updated) });
+  }));
+
   router.use(authenticate);
 
   router.get('/notifications', (req, res) => {
