@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "node --env-file-if-exists=.env.local server.mjs",
     "build": "vite build",
-    "start": "NODE_ENV=production node --env-file-if-exists=.env.local server.mjs",
+    "start": "node --env-file-if-exists=.env.local scripts/start-production.mjs",
     "test": "node --test",
     "db:backup": "node --env-file-if-exists=.env.local scripts/backup-database.mjs",
     "db:restore": "node --env-file-if-exists=.env.local scripts/restore-database.mjs"

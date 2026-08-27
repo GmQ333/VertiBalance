@@ -1,6 +1,7 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import express from 'express';
 import { createApiApplication } from './server/app.mjs';
 import { SqliteStore } from './server/store.mjs';
 import { configureRuntimeModel } from './server/model-service.mjs';

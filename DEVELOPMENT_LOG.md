@@ -50,3 +50,9 @@ Git 分支名不支持冒号，因此以 `/` 代替 `feat:xxxx` 和 `fix:xxxx` �
 - 修正 SQLite 文件权限测试：POSIX 环境继续校验 `0600/0700`，Windows 环境校验数据库文件和目录初始化结果，避免将 NTFS mode 位误判为业务失败。
 - 全量 `npm test` 通过 63 项，`npm run build` 通过。
 - 当前环境未安装浏览器自动化运行时，因此本轮以生产构建、HTTP 健康检查和 API 冒烟测试作为前端运行态验收；浏览器截图验收仍需在具备 Chromium/Playwright 的环境执行。
+
+### 生产启动修复（`fix/production-start`）
+
+- 使用 Node 生产入口设置 `NODE_ENV`，替换 Windows 无法执行的 Unix 内联环境变量语法。
+- 生产静态文件服务显式导入 Express，确保 `npm start` 能正确加载构建产物。
+- 已在 Windows 上完成生产模式验收：首页返回 200，健康接口返回 SQLite 就绪状态。
