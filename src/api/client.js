@@ -29,6 +29,7 @@ export const api = {
   login: (body) => apiRequest('/auth/login', { method: 'POST', body }),
   register: (body) => apiRequest('/auth/register', { method: 'POST', body }),
   me: () => apiRequest('/auth/me'),
+  updateProfile: (body) => apiRequest('/auth/profile', { method: 'PATCH', body }),
   notifications: () => apiRequest('/notifications'),
   readNotification: (id) => apiRequest(`/notifications/${id}/read`, { method: 'PATCH', body: {} }),
   feedback: (body) => apiRequest('/feedback', { method: 'POST', body }),

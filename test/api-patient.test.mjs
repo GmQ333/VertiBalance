@@ -22,6 +22,14 @@ test.before(async () => {
 
 test.after(async () => context?.close());
 
+test('PATCH /auth/profile updates only the authenticated patient profile', async () => {
+  const result = await context.request('/auth/profile', { token: patient.token, method: 'PATCH', body: { name: '苏晴更新', phone: '13800000001', gender: '女', age: 35 } });
+  assert.equal(result.response.status, 200);
+  assert.equal(result.data.user.name, '苏晴更新');
+  assert.equal(result.data.user.passwordHash, undefined);
+  assert.ok(context.store.snapshot(['audits']).audits.some((item) => item.action === 'profile_updated' && item.objectId === patient.user.id));
+});
+
 test('GET /patient/dashboard returns only the patient aggregate', async () => {
   const result = await context.request('/patient/dashboard', { token: patient.token });
   assert.equal(result.response.status, 200);
