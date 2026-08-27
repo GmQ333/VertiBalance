@@ -370,13 +370,16 @@ export function createApiRouter(store, options = {}) {
 
   router.post('/followups/:id/feedback', requireRole('patient'), asyncRoute(async (req, res) => {
     const severity = Number(req.body?.severity);
+    const frequency = Number(req.body?.frequency ?? 0);
     if (!Number.isInteger(severity) || severity < 0 || severity > 10) throw httpError(400, 'INVALID_SEVERITY', '症状评分必须为 0 到 10 的整数');
+    if (!Number.isInteger(frequency) || frequency < 0 || frequency > 1000) throw httpError(400, 'INVALID_FREQUENCY', '过去 24 小时发作次数必须为 0 到 1000 的整数');
     const followup = await store.transaction(['followups', 'riskRules', 'notifications', 'audits'], (data) => {
       const target = data.followups.find((item) => item.id === req.params.id && item.patientId === req.user.id);
       if (!target) throw httpError(404, 'NOT_FOUND', '随访任务不存在');
+      if (target.status !== 'pending') throw httpError(409, 'FOLLOWUP_COMPLETED', '该随访任务已经提交过，不能重复提交');
       const text = String(req.body?.text || '').slice(0, 1000); const risk = screenRisk(text, data.riskRules);
-      target.feedback = { severity, text, medicationTaken: Boolean(req.body?.medicationTaken), submittedAt: now() };
-      target.status = 'completed'; target.abnormal = severity >= 8 || risk.dangerSignals.length > 0;
+      target.feedback = { severity, frequency, text, medicationTaken: Boolean(req.body?.medicationTaken), submittedAt: now() };
+      target.status = 'completed'; target.abnormal = severity >= 8 || frequency >= 10 || risk.dangerSignals.length > 0;
       data.notifications.push(notification(target.doctorId, target.abnormal ? 'warning' : 'followup', target.abnormal ? '随访反馈异常' : '患者完成随访', `${req.user.name}已提交“${target.title}”反馈。`, target.id));
       data.audits.push(auditEntry(req.user, 'followup_feedback', 'followup', target.id, target.abnormal ? '随访反馈异常，已标记医生关注' : '患者完成随访反馈'));
       return target;
