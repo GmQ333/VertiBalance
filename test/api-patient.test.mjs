@@ -178,6 +178,20 @@ test('GET /uploads/:id/download authorizes the owner and audits access', async (
   assert.ok(context.store.snapshot().audits.some((item) => item.action === 'medical_file_downloaded' && item.objectId === upload.id));
 });
 
+test('GET /uploads/:id/preview and DELETE /uploads/:id enforce ownership', async () => {
+  const preview = await fetch(`${context.baseUrl}/uploads/${upload.id}/preview`, { headers: { Authorization: `Bearer ${patient.token}` } });
+  assert.equal(preview.status, 200);
+  assert.equal(preview.headers.get('content-type'), 'application/pdf');
+  const foreignPreview = await fetch(`${context.baseUrl}/uploads/${upload.id}/preview`, { headers: { Authorization: `Bearer ${otherPatient.token}` } });
+  assert.equal(foreignPreview.status, 403);
+  const foreignDelete = await context.request(`/uploads/${upload.id}`, { token: otherPatient.token, method: 'DELETE' });
+  assert.equal(foreignDelete.response.status, 404);
+  const removed = await context.request(`/uploads/${upload.id}`, { token: patient.token, method: 'DELETE' });
+  assert.equal(removed.response.status, 200);
+  assert.equal(context.store.snapshot().uploads.some((item) => item.id === upload.id), false);
+  assert.ok(context.store.snapshot().audits.some((item) => item.action === 'medical_file_deleted' && item.objectId === upload.id));
+});
+
 test('GET /followups and POST /followups/:id/feedback maintain patient ownership', async () => {
   const list = await context.request('/followups', { token: patient.token });
   assert.equal(list.response.status, 200);
