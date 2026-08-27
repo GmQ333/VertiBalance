@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { screenRisk, redactUnsafeClaims, buildReport, callDoctorAnalysis } from '../server/model-service.mjs';
+import { screenRisk, redactUnsafeClaims, buildReport, callDoctorAnalysis, callPatientTurn, callPatientReport } from '../server/model-service.mjs';
 import { createToken, hashPassword, verifyPassword, verifyToken } from '../server/security.mjs';
 import { SqliteStore } from '../server/store.mjs';
 
@@ -63,6 +63,37 @@ test('doctor model analysis validates structured output without external network
     assert.deepEqual(result.analysis.followupQuestions, ['是否伴听力变化？']);
     assert.match(result.analysis.differentialDirections[0], /可能/);
   } finally { globalThis.fetch = originalFetch; process.env.MEDCHAT_API_KEY = originalKey; }
+});
+
+test('patient model turns and reports require validated structured JSON', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.MEDCHAT_API_KEY;
+  process.env.MEDCHAT_API_KEY = 'local-test-key';
+  let call = 0;
+  globalThis.fetch = async () => {
+    call += 1;
+    const content = call === 1
+      ? JSON.stringify({ question: '这次眩晕每次大约持续多久？', riskLevel: 'medium', dangerSignals: [], possibleDirections: ['可能涉及外周前庭方向'], recommendedDepartment: '眩晕专病门诊', careTimeframe: '一周内就医', immediateCare: false, readyToComplete: false, collectedFields: ['symptom', 'duration'] })
+      : JSON.stringify({ chiefComplaint: '反复旋转感', episodeFeatures: '每次约 20 秒', triggers: '翻身时明显', accompanyingSymptoms: '轻微恶心', history: '未采集', medications: '未采集', aiRiskNote: '可能涉及位置性眩晕方向，建议进一步检查。', recommendedDepartment: '耳鼻喉科/眩晕专病门诊', careTimeframe: '一周内就医', dangerSignals: [], possibleDirections: ['可能涉及位置性眩晕方向'], riskLevel: 'medium', immediateCare: false });
+    return { ok: true, json: async () => ({ choices: [{ message: { content } }] }) };
+  };
+  try {
+    const turn = await callPatientTurn([{ role: 'user', content: '我最近会旋转' }]);
+    assert.equal(turn.turn.readyToComplete, false);
+    assert.deepEqual(turn.turn.collectedFields, ['symptom', 'duration']);
+    const report = await callPatientReport({ consultation: { riskLevel: 'medium', dangerSignals: [] }, messages: [{ role: 'user', content: '我最近会旋转' }] });
+    assert.equal(report.report.generationSource, 'model');
+    assert.equal(report.report.riskLevel, 'medium');
+  } finally { globalThis.fetch = originalFetch; process.env.MEDCHAT_API_KEY = originalKey; }
+});
+
+test('patient model turn rejects malformed JSON', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.MEDCHAT_API_KEY;
+  process.env.MEDCHAT_API_KEY = 'local-test-key';
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: 'not-json' } }] }) });
+  try { await assert.rejects(() => callPatientTurn([{ role: 'user', content: '头晕' }]), { code: 'INVALID_MODEL_RESPONSE' }); }
+  finally { globalThis.fetch = originalFetch; process.env.MEDCHAT_API_KEY = originalKey; }
 });
 
 test('SQLite store serializes transactions and writes durable data', async () => {

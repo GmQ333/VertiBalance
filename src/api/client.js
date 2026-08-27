@@ -25,6 +25,7 @@ export async function apiRequest(path, options = {}) {
 }
 
 export const api = {
+  health: () => apiRequest('/health'),
   login: (body) => apiRequest('/auth/login', { method: 'POST', body }),
   register: (body) => apiRequest('/auth/register', { method: 'POST', body }),
   me: () => apiRequest('/auth/me'),
@@ -33,6 +34,8 @@ export const api = {
   feedback: (body) => apiRequest('/feedback', { method: 'POST', body }),
   patientDashboard: () => apiRequest('/patient/dashboard'),
   startConsultation: () => apiRequest('/consultations', { method: 'POST', body: {} }),
+  consultations: () => apiRequest('/consultations'),
+  consultation: (id) => apiRequest(`/consultations/${id}`),
   sendConsultationMessage: (id, content) => apiRequest(`/consultations/${id}/messages`, { method: 'POST', body: { content } }),
   completeConsultation: (id) => apiRequest(`/consultations/${id}/complete`, { method: 'POST', body: {} }),
   reports: () => apiRequest('/reports'),

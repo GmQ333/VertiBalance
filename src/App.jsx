@@ -14,7 +14,7 @@ const DISCLAIMER = '本系统仅用于辅助筛查和健康信息参考，不能
 const ROLE_LABELS = { patient: '患者端', doctor: '医生端', admin: '管理端' };
 const patientNav = [
   ['overview', LayoutDashboard, '健康首页'], ['consult', MessageCircleMore, '智能问诊'],
-  ['reports', FileText, '问诊报告'], ['appointments', CalendarDays, '我的挂号'],
+  ['reports', FileText, '问诊记录'], ['appointments', CalendarDays, '我的挂号'],
   ['followup', Activity, '康复随访'], ['documents', FileClock, '健康资料'], ['education', BookOpen, '健康科普'],
 ];
 const doctorNav = [
@@ -144,8 +144,10 @@ function LivePatientOverview({ setActive, user }) {
   return <div className="page patient-home"><section className="patient-hero"><div className="hero-copy"><span className="eyebrow"><Sparkles size={15}/>AI 眩晕专病助手</span><h1>你好，{user.name}</h1><p>如果出现眩晕、头昏或失衡，我会先用规则筛查危险信号，再由专业模型进行引导式追问。</p><div className="hero-actions"><button className="primary-button" onClick={()=>setActive('consult')}><MessageCircleMore size={18}/>开始智能问诊<ArrowRight size={17}/></button><button className="soft-button" onClick={()=>setActive('reports')}><FileText size={18}/>我的 {data?.reports.length||0} 份报告</button></div></div><div className="hero-visual" aria-hidden="true"><div className="orbit orbit-one"/><div className="orbit orbit-two"/><div className="hero-pulse"><Activity size={38}/></div></div></section><div className="quick-grid"><button className="quick-card indigo" onClick={()=>setActive('consult')}><span><MessageCircleMore size={21}/></span><div><strong>症状不舒服？</strong><p>开始可自动保存的专业预问诊</p></div><ChevronRight size={20}/></button><button className="quick-card mint" onClick={()=>setActive('appointments')}><span><CalendarDays size={21}/></span><div><strong>{data?.upcomingBooking?'已有预约':'预约专科医生'}</strong><p>{data?.upcomingBooking?new Date(data.upcomingBooking.appointmentAt).toLocaleString('zh-CN'):'查看推荐医生与实时号源'}</p></div><ChevronRight size={20}/></button><button className="quick-card amber" onClick={()=>setActive('documents')}><span><FileClock size={21}/></span><div><strong>补充病史资料</strong><p>安全上传检查单和既往病历</p></div><ChevronRight size={20}/></button></div><div className="two-column"><section className="panel"><div className="section-heading"><div><h2>待办健康任务</h2><p>数据来自医生安排的真实随访计划</p></div><button className="text-button" onClick={()=>setActive('followup')}>查看全部<ChevronRight size={15}/></button></div><div className="timeline-list">{data?.followups.length?data.followups.slice(0,3).map((item,index)=><div className="timeline-row" key={item.id}><div className="timeline-date"><b>{new Date(item.dueAt).getDate()}</b><span>{new Date(item.dueAt).toLocaleDateString('zh-CN',{month:'short'})}</span></div><i className={index===0?'current':''}><ClipboardCheck size={13}/></i><div><strong>{item.title}</strong><span>{item.type} · {item.status}</span></div><em>{item.abnormal?'异常关注':'待完成'}</em></div>):<p className="empty-inline">暂无待办随访任务</p>}</div></section><section className="panel knowledge-preview"><div className="section-heading"><div><h2>为你推荐</h2><p>专业知识库内容，不构成诊断</p></div><button className="text-button" onClick={()=>setActive('education')}>全部科普<ChevronRight size={15}/></button></div>{data?.knowledge[0]&&<div className="article-feature"><div className="article-art"><BookOpen size={32}/></div><div><span className="tag">{data.knowledge[0].category}</span><h3>{data.knowledge[0].title}</h3><p>{data.knowledge[0].summary}</p></div></div>}</section></div></div>;
 }
 
-function RiskNotice({ emergency }) {
-  return emergency ? <div className="emergency-card"><div className="emergency-icon"><AlertTriangle size={25}/></div><div><strong>检测到需要紧急关注的危险信号</strong><p>请停止自行活动，立即前往急诊或呼叫 120。不要独自驾车；你仍可在下方补充信息，但不要因此延误就医。</p></div><button onClick={() => window.alert('请立即拨打 120 或当地急救电话，并请家人陪同。')}>急救指引</button></div> : null;
+function RiskNotice({ riskLevel }) {
+  if (!['emergency', 'high'].includes(riskLevel)) return null;
+  const emergency = riskLevel === 'emergency';
+  return <div className={`emergency-card ${emergency ? '' : 'high-risk'}`}><div className="emergency-icon"><AlertTriangle size={25}/></div><div><strong>{emergency ? '检测到需要紧急关注的危险信号' : '当前信息提示较高风险'}</strong><p>{emergency ? '请停止自行活动，立即前往急诊或呼叫 120。不要独自驾车；你仍可在下方补充信息，但不要因此延误就医。' : '建议在 24 小时内就医评估。你仍可继续补充信息，但不要等待在线问诊结果而延误就医。'}</p></div>{emergency && <button onClick={() => window.alert('请立即拨打 120 或当地急救电话，并请家人陪同。')}>急救指引</button>}</div>;
 }
 
 function Consultation({ onReport }) {
@@ -153,19 +155,24 @@ function Consultation({ onReport }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [emergency, setEmergency] = useState(false);
+  const [riskLevel, setRiskLevel] = useState('low');
+  const [modelConfigured, setModelConfigured] = useState(null);
   const [startupError, setStartupError] = useState('');
   const scrollRef = useRef(null);
   const progress = Math.min(20 + Math.max(0, messages.length - 1) * 12, 88);
   const quickPrompts = messages.length < 3 ? ['周围在旋转', '感觉头昏沉', '走路不稳'] : ['有恶心或呕吐', '转头时更明显', '没有以上情况'];
+  const urgent = ['emergency', 'high'].includes(riskLevel);
+  const userMessageCount = messages.filter((message) => message.role === 'user').length;
+  const canComplete = urgent || userMessageCount >= 3;
 
   useEffect(() => {
     let active = true;
     api.startConsultation().then((result) => {
       if (!active) return;
       setConsultationId(result.consultation.id); setMessages(result.messages);
-      setEmergency(result.consultation.riskLevel === 'emergency');
+      setRiskLevel(result.consultation.riskLevel || 'low');
     }).catch((error) => active && setStartupError(error.message));
+    api.health().then((result) => active && setModelConfigured(result.modelConfigured)).catch(() => active && setModelConfigured(false));
     return () => { active = false; };
   }, []);
 
@@ -178,14 +185,14 @@ function Consultation({ onReport }) {
     try {
       const data = await api.sendConsultationMessage(consultationId, content);
       setMessages((current) => [...current, data.message]);
-      if (data.riskLevel === 'emergency' || data.dangerSignals.length) setEmergency(true);
+      setRiskLevel(data.riskLevel || 'medium');
     } catch (error) {
       setMessages((current) => [...current, { role: 'assistant', content: error.message || '智能问诊服务暂时不可用，已保留你的描述。建议稍后重试或直接咨询医生。', error: true }]);
     } finally { setLoading(false); setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 50); }
   }
 
   async function completeConsultation() {
-    if (!consultationId || loading) return;
+    if (!consultationId || loading || !canComplete) return;
     setLoading(true);
     try { const result = await api.completeConsultation(consultationId); onReport(result.report); }
     catch (error) { setMessages((current) => [...current, { role: 'assistant', content: error.message, error: true }]); }
@@ -193,12 +200,12 @@ function Consultation({ onReport }) {
   }
 
   return <div className="consult-page">
-    <div className="consult-header"><div><span className="live-dot" />智能问诊进行中</div><div className="consult-progress"><span>信息采集 {progress}%</span><i><b style={{ width: `${progress}%` }} /></i></div><button className="outline-button" disabled={!consultationId || loading} onClick={completeConsultation}>结束并生成报告</button></div>
+    <div className="consult-header"><div><span className="live-dot" />智能问诊进行中</div><div className="consult-progress"><span>信息采集 {progress}%</span><i><b style={{ width: `${progress}%` }} /></i></div><button className="outline-button" title={!canComplete ? '请至少完成三轮症状采集' : ''} disabled={!consultationId || loading || !canComplete} onClick={completeConsultation}>结束并生成报告</button></div>
     {startupError && <div className="emergency-card"><div className="emergency-icon"><AlertTriangle size={22}/></div><div><strong>无法创建问诊会话</strong><p>{startupError}</p></div><button onClick={() => window.location.reload()}>重试</button></div>}
-    <RiskNotice emergency={emergency} />
+    <RiskNotice riskLevel={riskLevel} />
     <div className="consult-layout">
       <section className="chat-panel">
-        <div className="chat-context"><div className="ai-avatar"><Bot size={21}/></div><div><strong>眩衡智能助手</strong><span><i /> DeepSeek 医疗推理服务已连接</span></div></div>
+        <div className="chat-context"><div className="ai-avatar"><Bot size={21}/></div><div><strong>眩衡智能助手</strong><span><i className={modelConfigured === false ? 'offline' : ''}/> {modelConfigured === null ? '正在检查问诊服务' : modelConfigured ? '专业模型服务已连接' : '规则筛查已启用，模型服务未配置'}</span></div></div>
         <div className="messages">
           <div className="day-divider"><span>今天 {new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span></div>
           {messages.map((message, index) => <div className={`message-row ${message.role}`} key={index}>
@@ -208,15 +215,15 @@ function Consultation({ onReport }) {
           {loading && <div className="message-row assistant"><div className="mini-ai"><Sparkles size={15}/></div><div className="bubble typing"><i/><i/><i/></div></div>}
           <div ref={scrollRef}/>
         </div>
-        <div className={`composer-wrap ${emergency ? 'emergency-mode' : ''}`}>
-          {!emergency && <div className="quick-prompts">{quickPrompts.map((item) => <button key={item} onClick={() => sendMessage(item)}>{item}</button>)}</div>}
+        <div className={`composer-wrap ${urgent ? 'emergency-mode' : ''}`}>
+          {!urgent && <div className="quick-prompts">{quickPrompts.map((item) => <button key={item} onClick={() => sendMessage(item)}>{item}</button>)}</div>}
           <div className="composer"><textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); } }} placeholder="请描述你的感受…" rows="1"/><button disabled={!input.trim() || loading} onClick={() => sendMessage()}><Send size={18}/></button></div>
-          <p>{emergency ? <><AlertTriangle size={13}/>补充信息不能替代急诊处置，请立即就医</> : <><LockKeyhole size={13}/>你的问诊内容将被加密保护，仅在挂号确认后移交医生</>}</p>
+          <p>{urgent ? <><AlertTriangle size={13}/>补充信息不能替代及时就医</> : <><LockKeyhole size={13}/>你的问诊内容将被加密保护，仅在挂号确认后移交医生</>}</p>
         </div>
       </section>
       <aside className="consult-side">
         <div className="side-card"><div className="side-title"><span>本次问诊</span><em>自动保存</em></div><div className="session-id">问诊编号 <b>{consultationId ? consultationId.slice(-12).toUpperCase() : '创建中…'}</b></div>
-          <div className="collection-list"><div className="checked"><Check size={14}/><span>主要症状</span><b>已采集</b></div><div className={messages.length > 2 ? 'checked' : ''}><Clock3 size={14}/><span>发作特点</span><b>{messages.length > 2 ? '已采集' : '采集中'}</b></div><div><Activity size={14}/><span>伴随症状</span><b>待询问</b></div><div><AlertTriangle size={14}/><span>危险信号</span><b>{emergency ? '已触发' : '持续筛查'}</b></div><div><FileClock size={14}/><span>既往史与用药</span><b>待询问</b></div></div>
+          <div className="collection-list"><div className="checked"><Check size={14}/><span>主要症状</span><b>已采集</b></div><div className={messages.length > 2 ? 'checked' : ''}><Clock3 size={14}/><span>发作特点</span><b>{messages.length > 2 ? '已采集' : '采集中'}</b></div><div><Activity size={14}/><span>伴随症状</span><b>{userMessageCount >= 2 ? '已记录' : '待询问'}</b></div><div><AlertTriangle size={14}/><span>危险信号</span><b>{urgent ? '已触发' : '持续筛查'}</b></div><div><FileClock size={14}/><span>既往史与用药</span><b>{userMessageCount >= 3 ? '已记录' : '待询问'}</b></div></div>
         </div>
         <div className="side-card safety-card"><div className="safety-head"><ShieldCheck size={18}/><strong>危险信号持续筛查中</strong></div><p>如果你现在出现以下任一情况，请直接告诉我：</p><ul><li>单侧肢体无力或麻木</li><li>说话不清或看东西重影</li><li>无法站立、突然剧烈头痛</li></ul></div>
         <div className="human-help"><CircleUserRound size={20}/><div><strong>需要人工帮助？</strong><span>可联系平台健康顾问</span></div><button>联系</button></div>
@@ -253,26 +260,51 @@ function PatientSubPage({ active, setActive }) {
 }
 
 function LivePatientReport({ setActive, latestReport }) {
-  const [reports, setReports] = useState(latestReport ? [latestReport] : []);
-  const [selectedId, setSelectedId] = useState(latestReport?.id || '');
+  const [consultations, setConsultations] = useState([]);
+  const [selectedId, setSelectedId] = useState(latestReport?.consultationId || '');
+  const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState('');
-  useEffect(() => { api.reports().then((result) => { setReports(result.reports); setSelectedId((current) => current || result.reports[0]?.id || ''); }).catch((requestError) => setError(requestError.message)).finally(() => setLoading(false)); }, []);
-  const report = reports.find((item) => item.id === selectedId) || reports[0];
-  if (loading && !report) return <DataLoading label="正在读取加密问诊报告…"/>;
-  if (!report) return <EmptyState icon={FileText} title="暂无问诊报告" message={error || '完成一次智能问诊后，结构化报告会保存在这里。'} action="开始智能问诊" onAction={() => setActive('consult')}/>;
-  const riskMeta = {
-    emergency: { label: '紧急', timing: '立即急诊或呼叫 120', tone: 'emergency' },
-    high: { label: '高', timing: '24 小时内就医', tone: 'high' },
-    medium: { label: '中', timing: '一周内就医', tone: 'moderate' },
-    low: { label: '低', timing: '按需就医并留意变化', tone: 'low' },
-  }[report.riskLevel] || { label: '待评估', timing: '建议咨询医生', tone: 'moderate' };
-  return <div className="page narrow-page"><button className="back-button" onClick={() => setActive('overview')}><ArrowLeft size={17}/>返回健康首页</button>
-    <div className="report-toolbar"><label>历史报告<select value={report.id} onChange={(event) => setSelectedId(event.target.value)}>{reports.map((item) => <option key={item.id} value={item.id}>{new Date(item.createdAt).toLocaleString('zh-CN')} · {item.id.slice(-8)}</option>)}</select></label></div>
-    <div className="report-heading"><div><span className="eyebrow"><FileText size={15}/>AI 预问诊报告</span><h1>眩晕症状初步评估</h1><p>问诊编号 {report.consultationId.slice(-12).toUpperCase()} · {new Date(report.createdAt).toLocaleString('zh-CN')}</p></div><div className={`risk-seal ${riskMeta.tone}`}><span>风险等级</span><strong>{riskMeta.label}</strong><small>{riskMeta.timing}</small></div></div>
-    <div className="report-notice"><ShieldCheck size={19}/><div><strong>这不是一份诊断书</strong><p>报告用于帮助你与医生更高效地沟通，具体诊断和治疗方案需由医生面诊后决定。</p></div></div>
-    <div className="report-grid"><section className="panel report-main"><h2>症状摘要</h2><p className="summary-text">{report.chiefComplaint}</p><div className="fact-grid"><div><span>发作特点</span><strong>{report.episodeFeatures}</strong></div><div><span>主要诱因</span><strong>{report.triggers}</strong></div><div><span>伴随症状</span><strong>{report.accompanyingSymptoms}</strong></div><div><span>危险信号</span><strong className={report.dangerSignals.length ? 'danger-text' : 'safe-text'}>{report.dangerSignals.length ? <AlertTriangle size={15}/> : <Check size={15}/>} {report.dangerSignals.join('、') || '暂未识别'}</strong></div></div><h2>AI 初步风险提示</h2><div className="direction-card"><div><Brain size={22}/></div><div><strong>{report.recommendedDepartment}</strong><p>{report.aiRiskNote}</p></div></div></section>
-      <aside><div className="panel recommendation"><span className="tag">就医建议</span><h3>{report.riskLevel === 'emergency' ? '请立即前往急诊或呼叫 120' : report.riskLevel === 'high' ? '建议 24 小时内就医评估' : `建议预约${report.recommendedDepartment}`}</h3><div><Hospital size={17}/><p><span>推荐科室</span><strong>{report.recommendedDepartment}</strong></p></div><div><Clock3 size={17}/><p><span>建议时效</span><strong>{riskMeta.timing}</strong></p></div><button className="primary-button" onClick={() => setActive('appointments')}>查看可约医生<ArrowRight size={17}/></button></div><button className="download-card" onClick={() => window.print()}><FileText size={20}/><div><strong>保存报告</strong><span>打印或导出为 PDF</span></div><ChevronRight size={18}/></button></aside></div>
+  useEffect(() => {
+    api.consultations().then((result) => {
+      setConsultations(result.consultations);
+      setSelectedId((current) => current || result.consultations[0]?.id || '');
+    }).catch((requestError) => setError(requestError.message)).finally(() => setLoading(false));
+  }, []);
+  useEffect(() => {
+    if (!selectedId) { setDetail(null); return; }
+    let active = true; setDetailLoading(true); setError('');
+    api.consultation(selectedId).then((result) => active && setDetail(result)).catch((requestError) => active && setError(requestError.message)).finally(() => active && setDetailLoading(false));
+    return () => { active = false; };
+  }, [selectedId]);
+  if (loading) return <DataLoading label="正在读取加密问诊记录…"/>;
+  if (!consultations.length) return <EmptyState icon={FileText} title="暂无问诊记录" message={error || '开始一次智能问诊后，对话和结构化报告会保存在这里。'} action="开始智能问诊" onAction={() => setActive('consult')}/>;
+  const consultation = detail?.consultation || consultations.find((item) => item.id === selectedId);
+  const report = detail?.report || (latestReport?.consultationId === selectedId ? latestReport : null);
+  const statusLabels = { in_progress: '进行中', report_generated: '已生成报告', transferred: '已移交医生', ended: '已结束' };
+  const statusLabel = statusLabels[consultation?.status] || consultation?.status;
+  const messages = detail?.messages || [];
+  const directionItems = report?.possibleDirections?.length ? report.possibleDirections : ['疾病方向待医生进一步评估'];
+  const riskMeta = report ? ({
+    emergency: { label: '紧急', timing: report.careTimeframe || '立即急诊或呼叫 120', tone: 'emergency' },
+    high: { label: '高', timing: report.careTimeframe || '24 小时内就医', tone: 'high' },
+    medium: { label: '中', timing: report.careTimeframe || '一周内就医', tone: 'moderate' },
+    low: { label: '低', timing: report.careTimeframe || '按需就医并留意变化', tone: 'low' },
+  }[report.riskLevel] || { label: '待评估', timing: '建议咨询医生', tone: 'moderate' }) : null;
+  return <div className="page records-page"><button className="back-button" onClick={() => setActive('overview')}><ArrowLeft size={17}/>返回健康首页</button>
+    <div className="page-title"><div><span className="eyebrow"><History size={15}/>患者问诊中心</span><h1>问诊记录</h1><p>查看进行中的问诊、完整历史对话和结构化报告。</p></div><button className="primary-button" onClick={() => setActive('consult')}><Plus size={17}/>开始新问诊</button></div>
+    {error && <div className="inline-feedback">{error}</div>}
+    <div className="records-layout"><aside className="panel record-index"><div className="section-heading"><div><h2>全部记录</h2><p>{consultations.length} 次问诊</p></div></div>{consultations.map((item) => <button key={item.id} className={selectedId === item.id ? 'active' : ''} onClick={() => setSelectedId(item.id)}><span className={`record-status ${item.status}`}>{statusLabels[item.status] || item.status}</span><strong>{new Date(item.createdAt).toLocaleString('zh-CN')}</strong><small>{item.id.slice(-12).toUpperCase()} · {item.riskLevel === 'emergency' ? '紧急' : item.riskLevel === 'high' ? '高' : item.riskLevel === 'medium' ? '中' : '低'}风险</small><ChevronRight size={16}/></button>)}</aside>
+      <section className="record-content">{detailLoading ? <div className="panel record-loading">正在读取问诊详情…</div> : <>
+        <div className="panel record-summary"><div><span className={`record-status ${consultation?.status}`}>{statusLabel}</span><h2>问诊编号 {consultation?.id.slice(-12).toUpperCase()}</h2><p>{new Date(consultation?.createdAt).toLocaleString('zh-CN')} · 当前风险：{consultation?.riskLevel === 'emergency' ? '紧急' : consultation?.riskLevel === 'high' ? '高' : consultation?.riskLevel === 'medium' ? '中' : '低'}</p></div>{consultation?.status === 'in_progress' && <button className="primary-button" onClick={() => setActive('consult')}>继续问诊<ArrowRight size={16}/></button>}</div>
+        <div className="panel timeline-panel"><div className="section-heading"><div><h2>完整问诊对话</h2><p>{messages.length} 条消息，按发生时间保存</p></div></div><div className="conversation-record patient-conversation">{messages.map((item) => <div className={item.role} key={item.id}><span>{item.role === 'user' ? '我' : '眩衡助手'}</span><p>{item.content}</p><time>{new Date(item.createdAt).toLocaleString('zh-CN')}</time></div>)}</div></div>
+        {report ? <div className="record-report"><div className="report-heading"><div><span className="eyebrow"><FileText size={15}/>{report.generationSource === 'fallback' ? '保守降级报告' : 'AI 结构化预问诊报告'}</span><h1>眩晕症状初步评估</h1><p>生成于 {new Date(report.createdAt).toLocaleString('zh-CN')}</p></div><div className={`risk-seal ${riskMeta.tone}`}><span>风险等级</span><strong>{riskMeta.label}</strong><small>{riskMeta.timing}</small></div></div>
+          <div className={`report-notice ${report.generationSource === 'fallback' ? 'fallback' : ''}`}><ShieldCheck size={19}/><div><strong>{report.generationSource === 'fallback' ? '模型服务不可用，当前为保守报告' : '这不是一份诊断书'}</strong><p>{report.generationSource === 'fallback' ? '报告依据危险信号规则和已记录信息生成，请由医生进一步评估。' : '报告用于帮助你与医生更高效地沟通，具体诊断和治疗方案需由医生面诊后决定。'}</p></div></div>
+          <div className="report-grid"><section className="panel report-main"><h2>症状摘要</h2><p className="summary-text">{report.chiefComplaint}</p><div className="fact-grid"><div><span>发作特点</span><strong>{report.episodeFeatures}</strong></div><div><span>主要诱因</span><strong>{report.triggers}</strong></div><div><span>伴随症状</span><strong>{report.accompanyingSymptoms}</strong></div><div><span>危险信号</span><strong className={report.dangerSignals?.length ? 'danger-text' : 'safe-text'}>{report.dangerSignals?.length ? <AlertTriangle size={15}/> : <Check size={15}/>} {report.dangerSignals?.join('、') || '暂未识别'}</strong></div><div><span>既往史</span><strong>{report.history || '未采集'}</strong></div><div><span>当前用药</span><strong>{report.medications || '未采集'}</strong></div></div><h2>可能涉及的方向</h2><div className="direction-card"><div><Brain size={22}/></div><div><strong>{directionItems.join('；')}</strong><p>{report.aiRiskNote}</p></div></div></section>
+            <aside><div className="panel recommendation"><span className="tag">就医建议</span><h3>{report.riskLevel === 'emergency' ? '请立即前往急诊或呼叫 120' : report.riskLevel === 'high' ? '建议 24 小时内就医评估' : `建议预约${report.recommendedDepartment}`}</h3><div><Hospital size={17}/><p><span>推荐科室</span><strong>{report.recommendedDepartment}</strong></p></div><div><Clock3 size={17}/><p><span>建议时效</span><strong>{riskMeta.timing}</strong></p></div><button className="primary-button" onClick={() => setActive('appointments')}>查看可约医生<ArrowRight size={17}/></button></div><button className="download-card" onClick={() => window.print()}><FileText size={20}/><div><strong>保存报告</strong><span>打印或导出为 PDF</span></div><ChevronRight size={18}/></button></aside></div></div> : <div className="panel report-pending"><FileClock size={24}/><div><strong>尚未生成报告</strong><p>{consultation?.status === 'in_progress' ? '继续完成症状采集后即可生成结构化报告。' : '报告暂不可用，请稍后重试。'}</p></div></div>}
+      </>}</section>
+    </div>
   </div>;
 }
 
