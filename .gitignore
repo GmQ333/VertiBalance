@@ -11,3 +11,5 @@ data/vertibalance.sqlite-shm
 data/vertibalance.sqlite-wal
 data/uploads/
 backups/
+playwright-report/
+test-results/

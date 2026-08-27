@@ -77,7 +77,7 @@ function Shell({ role, user, onLogout, active, setActive, children }) {
   const nav = role === 'patient' ? patientNav : role === 'doctor' ? doctorNav : adminNav;
   return <div className={`app-shell role-${role}`}>
     <aside className={`sidebar ${mobileOpen ? 'mobile-open' : ''}`}>
-      <div className="sidebar-top"><Brand /><button className="close-mobile" onClick={() => setMobileOpen(false)}><X size={20} /></button></div>
+      <div className="sidebar-top"><Brand /><button className="close-mobile" aria-label="关闭导航" onClick={() => setMobileOpen(false)}><X size={20} /></button></div>
       <div className="nav-label">工作空间</div>
       <nav>{nav.map(([key, Icon, label]) => <button key={key} className={active === key ? 'active' : ''} onClick={() => { setActive(key); setMobileOpen(false); }}>
         <Icon size={19} /><span>{label}</span>{active === key && <span className="nav-indicator" />}
@@ -89,11 +89,11 @@ function Shell({ role, user, onLogout, active, setActive, children }) {
     </aside>
     <div className="main-frame">
       <header className="topbar">
-        <button className="mobile-menu" onClick={() => setMobileOpen(true)}><Menu size={22} /></button>
+        <button className="mobile-menu" aria-label="打开导航" onClick={() => setMobileOpen(true)}><Menu size={22} /></button>
         <div className="topbar-context"><span>{role === 'patient' ? '患者健康中心' : role === 'doctor' ? '临床协作中心' : '平台运营中心'}</span><small>今日 {new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })}</small></div>
         <div className="top-actions">
           <RoleDisplay role={role} />
-          <div className="notification-wrap"><button className="icon-button notification" onClick={() => setNoticeOpen(!noticeOpen)}><Bell size={19} />{notices.unread > 0 && <i />}</button>{noticeOpen && <div className="notification-panel"><div><strong>站内通知</strong><span>{notices.unread} 条未读</span></div>{notices.notifications.length ? notices.notifications.slice(0,8).map((item)=><button className={item.read?'read':''} key={item.id} onClick={()=>readNotice(item)}><i/><div><strong>{item.title}</strong><p>{item.content}</p><time>{new Date(item.createdAt).toLocaleString('zh-CN')}</time></div></button>) : <p className="empty-notice">暂无通知</p>}</div>}</div>
+          <div className="notification-wrap"><button className="icon-button notification" aria-label="站内通知" onClick={() => setNoticeOpen(!noticeOpen)}><Bell size={19} />{notices.unread > 0 && <i />}</button>{noticeOpen && <div className="notification-panel"><div><strong>站内通知</strong><span>{notices.unread} 条未读</span></div>{notices.notifications.length ? notices.notifications.slice(0,8).map((item)=><button className={item.read?'read':''} key={item.id} onClick={()=>readNotice(item)}><i/><div><strong>{item.title}</strong><p>{item.content}</p><time>{new Date(item.createdAt).toLocaleString('zh-CN')}</time></div></button>) : <p className="empty-notice">暂无通知</p>}</div>}</div>
           <ProfileMenu role={role} user={user} onLogout={onLogout}/>
         </div>
       </header>
@@ -193,7 +193,7 @@ function LivePatientReport({ setActive, latestReport }) {
     return () => { active = false; };
   }, [selectedId]);
   if (loading) return <DataLoading label="正在读取加密问诊记录…"/>;
-  if (!consultations.length) return <EmptyState icon={FileText} title="暂无问诊记录" message={error || '开始一次智能问诊后，对话和结构化报告会保存在这里。'} action="开始智能问诊" onAction={() => setActive('consult')}/>;
+  if (!consultations.length) return <div className="page records-page"><div className="page-title"><div><span className="eyebrow"><History size={15}/>患者问诊中心</span><h1>问诊记录</h1><p>查看进行中的问诊、完整历史对话和结构化报告。</p></div><button className="primary-button" onClick={() => setActive('consult')}><Plus size={17}/>开始新问诊</button></div><EmptyState embedded icon={FileText} title="暂无问诊记录" message={error || '开始一次智能问诊后，对话和结构化报告会保存在这里。'} action="开始智能问诊" onAction={() => setActive('consult')}/></div>;
   const consultation = detail?.consultation || consultations.find((item) => item.id === selectedId);
   const report = detail?.report || (latestReport?.consultationId === selectedId ? latestReport : null);
   const statusLabels = { in_progress: '进行中', report_generated: '已生成报告', transferred: '已移交医生', ended: '已结束' };
@@ -294,7 +294,7 @@ function PatientDocuments() {
 }
 
 function DataLoading({ label }) { return <div className="page"><div className="data-loading"><div className="brand-mark"><Activity size={21}/></div><span>{label}</span></div></div>; }
-function EmptyState({ icon: Icon, title, message, action, onAction }) { return <div className="page"><div className="panel placeholder-panel"><div className="placeholder-icon"><Icon size={34}/></div><h2>{title}</h2><p>{message}</p>{action && <button className="primary-button" onClick={onAction}>{action}<ArrowRight size={16}/></button>}</div></div>; }
+function EmptyState({ icon: Icon, title, message, action, onAction, embedded = false }) { return <div className={embedded ? '' : 'page'}><div className="panel placeholder-panel"><div className="placeholder-icon"><Icon size={34}/></div><h2>{title}</h2><p>{message}</p>{action && <button className="primary-button" onClick={onAction}>{action}<ArrowRight size={16}/></button>}</div></div>; }
 
 function RiskBadge({ risk }) { return <span className={`risk-badge risk-${risk}`}>{risk}风险</span>; }
 
