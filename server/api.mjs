@@ -180,6 +180,15 @@ export function createApiRouter(store, options = {}) {
     res.json({ notification: item });
   }));
 
+  router.patch('/notifications/read-all', asyncRoute(async (req, res) => {
+    const updated = await store.transaction(['notifications'], (data) => {
+      let count = 0;
+      for (const item of data.notifications) if (item.userId === req.user.id && !item.read) { item.read = true; count += 1; }
+      return count;
+    });
+    res.json({ updated });
+  }));
+
   router.post('/feedback', asyncRoute(async (req, res) => {
     const rating = Number(req.body?.rating); const content = String(req.body?.content || '').trim();
     if (!Number.isInteger(rating) || rating < 1 || rating > 5 || !content) throw httpError(400, 'INVALID_FEEDBACK', '请选择 1–5 分并填写反馈内容');
@@ -426,6 +435,7 @@ export function createApiRouter(store, options = {}) {
       target.status = 'cancelled'; const schedule = data.schedules.find((item) => item.id === target.scheduleId); if (schedule) schedule.remaining = Math.min(schedule.capacity, schedule.remaining + 1);
       const consultation = data.consultations.find((item) => item.id === target.consultationId); if (consultation) { consultation.status = 'report_generated'; consultation.assignedDoctorId = null; }
       data.notifications.push(notification(req.user.id, 'booking_cancelled', '挂号已取消', `已取消${target.department}预约，号源已释放。`, target.id));
+      data.notifications.push(notification(target.doctorId, 'booking_cancelled', '患者取消预约', `${req.user.name}已取消${target.department}预约，号源已释放。`, target.id));
       data.audits.push(auditEntry(req.user, 'booking_cancelled', 'booking', target.id, '患者取消挂号并释放号源')); return target;
     });
     res.json({ booking });

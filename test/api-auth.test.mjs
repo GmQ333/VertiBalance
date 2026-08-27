@@ -97,6 +97,14 @@ test('PATCH /notifications/:id/read updates only an owned notification', async (
   assert.equal(foreign.response.status, 404);
 });
 
+test('PATCH /notifications/read-all marks only the authenticated user notifications', async () => {
+  const result = await request('/notifications/read-all', { token: patientToken, method: 'PATCH', body: {} });
+  assert.equal(result.response.status, 200);
+  const data = store.snapshot(['notifications']).notifications;
+  assert.ok(data.filter((item) => item.userId === 'usr_patient_demo').every((item) => item.read));
+  assert.equal(data.find((item) => item.id === 'ntf_admin_test').read, false);
+});
+
 test('POST /feedback validates and persists bounded feedback', async () => {
   const created = await request('/feedback', { token: patientToken, method: 'POST', body: { rating: 5, content: '数据库接口验证反馈' } });
   assert.equal(created.response.status, 201);
