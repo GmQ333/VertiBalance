@@ -30,10 +30,10 @@ npm ci
 ### 3. 配置环境变量
 
 ```bash
-cp .env.example .env.local
+cp .env.example .env
 ```
 
-然后编辑 `.env.local`：
+然后编辑 `.env`。如需仅在当前机器覆盖某些配置，可创建 `.env.local`，同名变量以 `.env.local` 为准：
 
 ```dotenv
 MEDCHAT_API_BASE_URL=https://api.modagent-homing.com/v1
@@ -46,7 +46,7 @@ UPLOAD_DIRECTORY=./data/uploads
 BACKUP_ROOT=./backups
 ```
 
-`MEDCHAT_API_KEY` 未配置时，平台的普通业务功能仍可启动，但调用大模型的功能会显示服务未配置或降级提示。真实密钥只能放在 `.env.local` 或服务器环境变量中，不能提交到 Git，也不能使用会暴露到浏览器的 `VITE_*` 前端变量。
+`MEDCHAT_API_KEY` 未配置时，平台的普通业务功能仍可启动，但调用大模型的功能会显示服务未配置或降级提示。真实密钥只能放在已被 Git 忽略的 `.env`、`.env.local` 或服务器环境变量中，不能提交到 Git，也不能使用会暴露到浏览器的 `VITE_*` 前端变量。
 
 ### 4. 启动开发环境
 

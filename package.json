@@ -7,12 +7,12 @@
     "node": ">=22.5.0"
   },
   "scripts": {
-    "dev": "node --env-file-if-exists=.env.local server.mjs",
+    "dev": "node --env-file-if-exists=.env --env-file-if-exists=.env.local server.mjs",
     "build": "vite build",
-    "start": "node --env-file-if-exists=.env.local scripts/start-production.mjs",
+    "start": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/start-production.mjs",
     "test": "node --test",
-    "db:backup": "node --env-file-if-exists=.env.local scripts/backup-database.mjs",
-    "db:restore": "node --env-file-if-exists=.env.local scripts/restore-database.mjs"
+    "db:backup": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/backup-database.mjs",
+    "db:restore": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/restore-database.mjs"
   },
   "dependencies": {
     "express": "^5.1.0",
