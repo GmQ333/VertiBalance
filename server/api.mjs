@@ -515,6 +515,27 @@ export function createApiRouter(store, options = {}) {
     res.download(path.join(uploadDirectory, item.storedName), item.name);
   }));
 
+  router.get('/uploads/:id/preview', asyncRoute(async (req, res) => {
+    const data = store.snapshot(['uploads', 'bookings']); const item = data.uploads.find((entry) => entry.id === req.params.id);
+    if (!item) throw httpError(404, 'NOT_FOUND', '资料不存在');
+    const allowed = req.user.role === 'admin' || item.patientId === req.user.id || (req.user.role === 'doctor' && data.bookings.some((booking) => booking.doctorId === req.user.id && booking.patientId === item.patientId && booking.status !== 'cancelled'));
+    if (!allowed) throw httpError(403, 'FORBIDDEN', '无权预览该资料');
+    await store.transaction(['audits'], (draft) => { draft.audits.push(auditEntry(req.user, 'medical_file_previewed', 'upload', item.id, '授权用户预览患者资料')); });
+    res.type(item.mimeType).set('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(item.name)}`).sendFile(path.join(uploadDirectory, item.storedName));
+  }));
+
+  router.delete('/uploads/:id', requireRole('patient'), asyncRoute(async (req, res) => {
+    const removed = await store.transaction(['uploads', 'audits'], (data) => {
+      const index = data.uploads.findIndex((item) => item.id === req.params.id && item.patientId === req.user.id);
+      if (index < 0) throw httpError(404, 'NOT_FOUND', '资料不存在');
+      const [item] = data.uploads.splice(index, 1);
+      data.audits.push(auditEntry(req.user, 'medical_file_deleted', 'upload', item.id, `患者删除${item.category}`));
+      return item;
+    });
+    await fs.unlink(path.join(uploadDirectory, removed.storedName)).catch((error) => { if (error.code !== 'ENOENT') console.error('Upload cleanup failed:', error); });
+    res.json({ deleted: true, id: removed.id });
+  }));
+
   router.get('/doctor/workbench', requireRole('doctor'), asyncRoute(async (req, res) => {
     const data = store.snapshot(['bookings', 'users', 'consultations', 'reports', 'followups']);
     const bookings = data.bookings.filter((item) => item.doctorId === req.user.id && item.status === 'confirmed');

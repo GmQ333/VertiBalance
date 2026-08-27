@@ -52,6 +52,7 @@ export const api = {
   knowledge: (category = '') => apiRequest(`/knowledge${category ? `?category=${encodeURIComponent(category)}` : ''}`),
   uploads: () => apiRequest('/uploads'),
   upload: (formData) => apiRequest('/uploads', { method: 'POST', body: formData }),
+  deleteUpload: (id) => apiRequest(`/uploads/${id}`, { method: 'DELETE' }),
   doctorWorkbench: () => apiRequest('/doctor/workbench'),
   doctorSchedules: (doctorId) => apiRequest(`/schedules?doctorId=${encodeURIComponent(doctorId)}`),
   doctorPatient: (id) => apiRequest(`/doctor/patients/${id}`),
