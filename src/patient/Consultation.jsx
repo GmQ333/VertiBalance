@@ -25,6 +25,7 @@ export default function Consultation({ onReport }) {
   const [supportForm, setSupportForm] = useState({ category: '问诊流程', contact: '', summary: '' });
   const [supportMessage, setSupportMessage] = useState('');
   const [supportSubmitting, setSupportSubmitting] = useState(false);
+  const [pendingRetry, setPendingRetry] = useState('');
   const scrollRef = useRef(null);
   const progress = Math.min(20 + Math.max(0, messages.length - 1) * 12, 88);
   const quickPrompts = messages.length < 3 ? ['周围在旋转', '感觉头昏沉', '走路不稳'] : ['有恶心或呕吐', '转头时更明显', '没有以上情况'];
@@ -43,11 +44,20 @@ export default function Consultation({ onReport }) {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    const saved = localStorage.getItem('vertibalance_consult_draft');
+    if (saved) setInput(saved);
+  }, []);
+  useEffect(() => {
+    if (input) localStorage.setItem('vertibalance_consult_draft', input);
+    else localStorage.removeItem('vertibalance_consult_draft');
+  }, [input]);
+
   async function sendMessage(text = input) {
     const content = text.trim();
     if (!content || loading || !consultationId) return;
     const next = [...messages, { role: 'user', content }];
-    setMessages(next); setInput('');
+    setMessages(next); setInput(''); setPendingRetry('');
     setLoading(true);
     try {
       const data = await api.sendConsultationMessage(consultationId, content);
@@ -55,12 +65,14 @@ export default function Consultation({ onReport }) {
       setRiskLevel(data.riskLevel || 'medium');
       setTriage(data.triage || null);
     } catch (error) {
-      setMessages((current) => [...current, { role: 'assistant', content: error.message || '智能问诊服务暂时不可用，已保留你的描述。建议稍后重试或直接咨询医生。', error: true }]);
+      setPendingRetry(content);
+      setMessages((current) => [...current, { role: 'assistant', content: error.message || '智能问诊服务暂时不可用，已保留你的描述。', error: true, retry: true }]);
     } finally { setLoading(false); setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 50); }
   }
 
   async function completeConsultation() {
     if (!consultationId || loading || !canComplete) return;
+    if (!window.confirm('确认结束本次问诊并生成结构化报告？结束后不能继续补充消息。')) return;
     setLoading(true);
     try { const result = await api.completeConsultation(consultationId); onReport(result.report); }
     catch (error) { setMessages((current) => [...current, { role: 'assistant', content: error.message, error: true }]); }
@@ -94,16 +106,16 @@ export default function Consultation({ onReport }) {
           <div className="day-divider"><span>今天 {new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span></div>
           {messages.map((message, index) => <div className={`message-row ${message.role}`} key={index}>
             {message.role === 'assistant' && <div className="mini-ai"><Sparkles size={15}/></div>}
-            <div className={`bubble ${message.error ? 'error' : ''}`}>{message.content}</div>
+            <div className={`bubble ${message.error ? 'error' : ''}`}>{message.content}{message.retry && pendingRetry && <button className="message-retry" onClick={() => sendMessage(pendingRetry)}>重新发送</button>}</div>
           </div>)}
           {triage && riskLevel !== 'low' && <div className={`chat-guidance ${riskLevel}`}><div className="guidance-icon"><Hospital size={19}/></div><div><span>{riskLevel === 'emergency' ? '紧急就医提示' : '本轮就医建议'}</span><strong>{triage.recommendedDepartment}</strong><p>{triage.careTimeframe}</p></div>{riskLevel === 'emergency' ? <button className="danger-action" onClick={() => window.alert('请立即拨打 120 或当地急救电话，并请家人陪同。')}>查看急救指引</button> : <button className="primary-button" disabled={!canComplete || loading} onClick={completeConsultation}>{canComplete ? '生成报告并继续预约' : '完成三轮问诊后可预约'}<ArrowRight size={15}/></button>}<small>建议来自本轮规则筛查与结构化问诊结果，最终以医生判断为准。</small></div>}
           {loading && <div className="message-row assistant"><div className="mini-ai"><Sparkles size={15}/></div><div className="bubble typing"><i/><i/><i/></div></div>}
           <div ref={scrollRef}/>
         </div>
-        <div className={`composer-wrap ${urgent ? 'emergency-mode' : ''}`}>
+          <div className={`composer-wrap ${urgent ? 'emergency-mode' : ''}`}>
           {!urgent && <div className="quick-prompts">{quickPrompts.map((item) => <button key={item} onClick={() => sendMessage(item)}>{item}</button>)}</div>}
           <div className="composer"><textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); } }} placeholder="请描述你的感受…" rows="1"/><button disabled={!input.trim() || loading} onClick={() => sendMessage()}><Send size={18}/></button></div>
-          <p>{urgent ? <><AlertTriangle size={13}/>补充信息不能替代及时就医</> : <><LockKeyhole size={13}/>你的问诊内容将被加密保护，仅在挂号确认后移交医生</>}</p>
+          <p>{urgent ? <><AlertTriangle size={13}/>补充信息不能替代及时就医</> : <><LockKeyhole size={13}/>你的问诊内容将被加密保护，仅在挂号确认后移交医生</>} {input && <span className="draft-status">已保存草稿</span>}</p>
         </div>
       </section>
       <aside className="consult-side">
