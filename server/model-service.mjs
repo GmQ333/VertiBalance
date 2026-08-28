@@ -209,6 +209,22 @@ export async function callDoctorAnalysis({ report, messages }) {
   }
 }
 
+export async function callDoctorQuestion({ report, messages, analysis, history = [], question }) {
+  const prompt = `你是眩晕专病临床辅助问答助手。医生已经查看了结构化分析，现在需要针对一个具体问题继续整理信息。请只提供鉴别思路、需要补充的证据、建议追问或检查方向，不得替代医生作出最终诊断。若资料提示言语含糊、单侧无力、复视、意识异常或无法站立行走等危险信号，必须优先提醒及时急诊评估。回答使用简洁、清楚的中文，并明确说明不确定性。`;
+  const safeAnalysis = analysis && typeof analysis === 'object' ? {
+    symptomHighlights: Array.isArray(analysis.symptomHighlights) ? analysis.symptomHighlights.slice(0, 8) : [],
+    followupQuestions: Array.isArray(analysis.followupQuestions) ? analysis.followupQuestions.slice(0, 8) : [],
+    differentialDirections: Array.isArray(analysis.differentialDirections) ? analysis.differentialDirections.slice(0, 8) : [],
+    dangerSignals: Array.isArray(analysis.dangerSignals) ? analysis.dangerSignals.slice(0, 8) : [],
+    suggestedExams: Array.isArray(analysis.suggestedExams) ? analysis.suggestedExams.slice(0, 8) : [],
+    structuredSummary: typeof analysis.structuredSummary === 'string' ? analysis.structuredSummary.slice(0, 2000) : '',
+  } : null;
+  const safeHistory = Array.isArray(history) ? history.slice(-8).map(({ role, content }) => ({ role, content: String(content || '').slice(0, 1000) })) : [];
+  const context = JSON.stringify({ report, conversation: messages.map(({ role, content }) => ({ role, content })), structuredAnalysis: safeAnalysis, followup: safeHistory, question });
+  const response = await callMedicalModel([{ role: 'user', content: `请基于以下已脱敏资料回答医生追问：${context}` }], prompt);
+  return { answer: response.content, ...response };
+}
+
 export function buildReport(consultation, messages) {
   const userText = messages.filter((message) => message.role === 'user').map((message) => message.content).join('；');
   const positional = /翻身|转头|起床|体位/.test(userText);

@@ -2,10 +2,11 @@ import express from 'express';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import multer from 'multer';
-import { buildReport, callDoctorAnalysis, callPatientReport, callPatientTurn, configureRuntimeModel, screenRisk } from './model-service.mjs';
+import { buildReport, callDoctorAnalysis, callDoctorQuestion, callPatientReport, callPatientTurn, configureRuntimeModel, screenRisk } from './model-service.mjs';
 import { createId, createToken, hashPassword, publicUser, verifyPassword, verifyToken } from './security.mjs';
 
 const riskWeight = { low: 1, medium: 2, high: 3, emergency: 4 };
+const riskLabels = { high: '高风险', medium: '中风险', low: '低风险' };
 const careByRisk = {
   low: { careTimeframe: '按需就医并留意变化', immediateCare: false },
   medium: { careTimeframe: '一周内就医', immediateCare: false },
@@ -468,10 +469,10 @@ export function createApiRouter(store, options = {}) {
   }));
 
   router.get('/followups', (req, res) => {
-    const data = store.snapshot(['followups', 'users']); let followups = data.followups;
+    const data = store.snapshot(['followups', 'users', 'consultations']); let followups = data.followups;
     if (req.user.role === 'patient') followups = followups.filter((item) => item.patientId === req.user.id);
     if (req.user.role === 'doctor') followups = followups.filter((item) => item.doctorId === req.user.id);
-    res.json({ followups: followups.sort((a, b) => a.dueAt.localeCompare(b.dueAt)).map((item) => ({ ...item, patient: publicUser(data.users.find((user) => user.id === item.patientId)), doctor: publicUser(data.users.find((user) => user.id === item.doctorId)) })) });
+    res.json({ followups: followups.sort((a, b) => a.dueAt.localeCompare(b.dueAt)).map((item) => { const consultation = data.consultations.filter((entry) => entry.patientId === item.patientId).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]; return { ...item, riskLevel: consultation?.riskLevel === 'emergency' ? 'high' : consultation?.riskLevel || 'low', patient: publicUser(data.users.find((user) => user.id === item.patientId)), doctor: publicUser(data.users.find((user) => user.id === item.doctorId)) }; }) });
   });
 
   router.post('/followups/:id/feedback', requireRole('patient'), asyncRoute(async (req, res) => {
@@ -570,9 +571,24 @@ export function createApiRouter(store, options = {}) {
       const consultation = data.consultations.find((item) => item.id === booking.consultationId);
       const report = data.reports.find((item) => item.consultationId === booking.consultationId);
       return { booking, patient: publicUser(patient), consultation, report };
-    }).sort((a, b) => riskWeight[b.consultation?.riskLevel] - riskWeight[a.consultation?.riskLevel] || a.booking.appointmentAt.localeCompare(b.booking.appointmentAt));
+    }).sort((a, b) => riskWeight[b.consultation?.riskLevel] - riskWeight[a.consultation?.riskLevel] || a.booking.createdAt.localeCompare(b.booking.createdAt));
+    const riskGroups = Object.entries(riskLabels).map(([risk, label]) => ({ risk, label, patients: queue.filter((item) => item.consultation?.riskLevel === risk) }));
     const followups = data.followups.filter((item) => item.doctorId === req.user.id && item.status === 'pending');
-    res.json({ queue, summary: { pending: queue.length, highRisk: queue.filter((item) => ['emergency', 'high'].includes(item.consultation?.riskLevel)).length, followups: followups.length, abnormalFollowups: followups.filter((item) => item.abnormal).length } });
+    res.json({ queue, riskGroups, summary: { total: queue.length, pending: queue.filter((item) => item.booking.status === 'confirmed').length, highRisk: queue.filter((item) => item.consultation?.riskLevel === 'high').length, followups: followups.length, abnormalFollowups: followups.filter((item) => item.abnormal).length } });
+  }));
+
+  router.get('/doctor/patients', requireRole('doctor'), asyncRoute(async (req, res) => {
+    const data = store.snapshot(['bookings', 'users', 'consultations', 'reports', 'followups', 'dispositions']);
+    const bookings = data.bookings.filter((item) => item.doctorId === req.user.id && item.status !== 'cancelled');
+    const patients = bookings.map((booking) => {
+      const patient = data.users.find((item) => item.id === booking.patientId);
+      const consultation = data.consultations.find((item) => item.id === booking.consultationId);
+      const report = data.reports.find((item) => item.consultationId === booking.consultationId);
+      const followups = data.followups.filter((item) => item.doctorId === req.user.id && item.patientId === booking.patientId);
+      const dispositions = data.dispositions.filter((item) => item.doctorId === req.user.id && item.patientId === booking.patientId);
+      return { patient: publicUser(patient), booking, consultation, report, latestFollowup: followups.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] || null, latestDisposition: dispositions.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt))[0] || null };
+    }).sort((a, b) => (b.booking.appointmentAt || '').localeCompare(a.booking.appointmentAt || ''));
+    res.json({ patients });
   }));
 
   router.get('/doctor/patients/:id', requireRole('doctor'), asyncRoute(async (req, res) => {
@@ -606,6 +622,31 @@ export function createApiRouter(store, options = {}) {
       draft.audits.push(auditEntry(req.user, 'doctor_ai_analysis', 'consultation', consultation.id, '医生请求结构化 AI 辅助分析'));
     });
     res.json({ analysis: result.analysis, model: result.model, disclaimer: '仅供参考，最终判断与处置由医生完成。' });
+  }));
+
+  router.post('/doctor/patients/:id/ai-question', requireRole('doctor'), asyncRoute(async (req, res) => {
+    const question = String(req.body?.question || '').trim();
+    if (!question || question.length > 1200) throw httpError(400, 'INVALID_QUESTION', '追问内容不能为空且不能超过 1200 个字符');
+    const data = store.snapshot(['bookings', 'consultations', 'reports', 'messages']);
+    if (!data.bookings.some((item) => item.doctorId === req.user.id && item.patientId === req.params.id && item.status !== 'cancelled')) throw httpError(403, 'PATIENT_NOT_ASSIGNED', '当前患者尚未分配给当前医生');
+    const consultation = data.consultations.filter((item) => item.patientId === req.params.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    if (!consultation) throw httpError(404, 'NOT_FOUND', '患者暂无问诊资料');
+    const report = data.reports.find((item) => item.consultationId === consultation.id) || null;
+    const messages = data.messages.filter((item) => item.consultationId === consultation.id);
+    let result;
+    try { result = await callDoctorQuestion({ report, messages, analysis: req.body?.analysis, history: req.body?.history, question }); }
+    catch (error) {
+      await store.transaction(['modelCalls', 'audits'], (draft) => {
+        draft.modelCalls.push({ id: createId('call'), consultationId: consultation.id, userId: req.user.id, model: process.env.MEDCHAT_MODEL || 'deepseek-v4-pro', success: false, error: error.code || 'MODEL_UNAVAILABLE', latencyMs: error.latencyMs || 0, purpose: 'doctor_question', createdAt: now() });
+        draft.audits.push(auditEntry(req.user, 'doctor_ai_question_failed', 'consultation', consultation.id, `医生追问辅助分析失败：${error.code || 'MODEL_UNAVAILABLE'}`, 'failed'));
+      });
+      throw error;
+    }
+    await store.transaction(['modelCalls', 'audits'], (draft) => {
+      draft.modelCalls.push({ id: createId('call'), consultationId: consultation.id, userId: req.user.id, model: result.model, success: true, error: null, latencyMs: result.latencyMs, purpose: 'doctor_question', createdAt: now() });
+      draft.audits.push(auditEntry(req.user, 'doctor_ai_question', 'consultation', consultation.id, '医生继续追问 AI 辅助分析'));
+    });
+    res.json({ answer: result.answer, model: result.model, disclaimer: '仅供参考，最终诊断与处置由医生完成。' });
   }));
 
   router.post('/doctor/dispositions', requireRole('doctor'), asyncRoute(async (req, res) => {
@@ -642,7 +683,7 @@ export function createApiRouter(store, options = {}) {
     res.json({
       metrics: {
         consultations: data.consultations.length, bookingConversion: completedConsultations.length ? Number((data.bookings.length / completedConsultations.length * 100).toFixed(1)) : 0,
-        highRisk: data.consultations.filter((item) => ['emergency', 'high'].includes(item.riskLevel)).length,
+        highRisk: data.consultations.filter((item) => item.riskLevel === 'high').length,
         followupCompletion: data.followups.length ? Number((data.followups.filter((item) => item.status === 'completed').length / data.followups.length * 100).toFixed(1)) : 0,
         modelSuccessRate: data.modelCalls.length ? Number((successfulCalls.length / data.modelCalls.length * 100).toFixed(1)) : 100,
         users: data.users.length, averageConsultationMinutes: durations.length ? Number((durations.reduce((sum, value) => sum + value, 0) / durations.length).toFixed(1)) : 0,

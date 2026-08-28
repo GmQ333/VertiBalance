@@ -681,19 +681,11 @@ function Shell({
   );
 }
 
-function StatCard({ icon: Icon, tone, label, value, detail, trend }) {
-  return (
-    <div className="stat-card">
-      <div className={`stat-icon ${tone}`}>
-        <Icon size={21} />
-      </div>
-      <div className="stat-copy">
-        <span>{label}</span>
-        <strong>{value}</strong>
-        <small className={trend ? "positive" : ""}>{detail}</small>
-      </div>
-    </div>
-  );
+function StatCard({ icon: Icon, tone, label, value, detail, trend, onClick }) {
+  return <div className={`stat-card ${onClick ? 'is-clickable' : ''}`} onClick={onClick} onKeyDown={(event) => { if (onClick && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onClick(); } }} role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined}>
+    <div className={`stat-icon ${tone}`}><Icon size={21} /></div>
+    <div className="stat-copy"><span>{label}</span><strong>{value}</strong><small className={trend ? 'positive' : ''}>{detail}</small></div>
+  </div>;
 }
 
 function PatientOverviewInsights({ data, setActive }) {
@@ -2764,613 +2756,300 @@ function DoctorApp({ active }) {
   );
 }
 
-const riskLabel = (risk) =>
-  risk === "emergency"
-    ? "紧急"
-    : risk === "high"
-      ? "高"
-      : risk === "low"
-        ? "低"
-        : "中";
+const riskLabel = (risk) => risk === 'high' ? '高' : risk === 'low' ? '低' : '中';
+const riskAvatarClass = (risk) => risk === 'high' ? 'rose' : risk === 'medium' ? 'amber' : 'green';
 
-function LiveDoctorWorkspace({ onPatient }) {
+function LiveDoctorWorkspace({ onPatient, onPatientsView, setActive }) {
   const [data, setData] = useState(null);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
+  const [selectedPatientId, setSelectedPatientId] = useState('');
+
   useEffect(() => {
-    api
-      .doctorWorkbench()
-      .then(setData)
-      .catch((requestError) => setError(requestError.message));
+    api.doctorWorkbench().then(setData).catch((requestError) => setError(requestError.message));
   }, []);
-  if (!data)
-    return error ? (
-      <EmptyState
-        icon={AlertTriangle}
-        title="无法读取接诊队列"
-        message={error}
-      />
-    ) : (
-      <DataLoading label="正在按风险等级整理患者队列…" />
-    );
-  const priority = data.queue.find((item) =>
-    ["emergency", "high"].includes(item.consultation?.riskLevel),
-  );
-  return (
-    <div className="page">
-      <div className="page-title">
-        <div>
-          <span className="eyebrow">
-            <Stethoscope size={15} />
-            临床工作台
-          </span>
-          <h1>今日接诊工作台</h1>
-          <p>
-            共有 {data.summary.pending} 位已移交患者，{data.summary.highRisk}{" "}
-            位需要优先关注。
-          </p>
-        </div>
-        <div className="date-control">
-          <CalendarDays size={17} />
-          {new Date().toLocaleDateString("zh-CN", {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          })}
-        </div>
-      </div>
-      <div className="stats-grid doctor-stats">
-        <StatCard
-          icon={Users}
-          tone="blue"
-          label="待接诊"
-          value={data.summary.pending}
-          detail="已完成挂号移交"
-        />
-        <StatCard
-          icon={AlertTriangle}
-          tone="rose"
-          label="高风险患者"
-          value={data.summary.highRisk}
-          detail="规则优先排序"
-        />
-        <StatCard
-          icon={ClipboardCheck}
-          tone="violet"
-          label="待办随访"
-          value={data.summary.followups}
-          detail={`${data.summary.abnormalFollowups} 项异常关注`}
-        />
-        <StatCard
-          icon={ShieldCheck}
-          tone="green"
-          label="资料访问"
-          value="已审计"
-          detail="查看行为自动留痕"
-        />
-      </div>
-      <div className="doctor-layout">
-        <section className="panel patient-list-panel">
-          <div className="section-heading">
-            <div>
-              <h2>患者队列</h2>
-              <p>只展示已挂号并分配给当前医生的患者</p>
-            </div>
-          </div>
-          <div className="tabs">
-            <button className="active">
-              待接诊 <b>{data.queue.length}</b>
-            </button>
-            <button>
-              高风险 <b>{data.summary.highRisk}</b>
-            </button>
-          </div>
-          <div className="patient-table">
-            <div className="table-head">
-              <span>患者</span>
-              <span>AI 风险</span>
-              <span>症状摘要</span>
-              <span>预约时间</span>
-              <span />
-            </div>
-            {data.queue.map((item, index) => (
-              <button
-                className="table-row"
-                key={item.booking.id}
-                onClick={() => onPatient(item)}
-              >
-                <span className="patient-cell">
-                  <i className={`avatar ${index % 2 ? "blue" : "rose"}`}>
-                    {item.patient.name.slice(0, 1)}
-                  </i>
-                  <span>
-                    <strong>{item.patient.name}</strong>
-                    <small>
-                      {item.patient.gender} · {item.patient.age} 岁 ·{" "}
-                      {item.patient.id}
-                    </small>
-                  </span>
-                </span>
-                <span>
-                  <RiskBadge risk={riskLabel(item.consultation.riskLevel)} />
-                </span>
-                <span className="symptom-cell">
-                  {item.report?.chiefComplaint || "报告摘要待生成"}
-                </span>
-                <span className="muted">
-                  {new Date(item.booking.appointmentAt).toLocaleString(
-                    "zh-CN",
-                    {
-                      month: "numeric",
-                      day: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    },
-                  )}
-                </span>
-                <span>
-                  <ChevronRight size={18} />
-                </span>
-              </button>
-            ))}
-          </div>
-        </section>
-        <aside className="doctor-aside">
-          {priority ? (
-            <div className="panel priority-card">
-              <div className="priority-head">
-                <span>
-                  <Zap size={18} />
-                  优先关注
-                </span>
-                <em>规则引擎</em>
-              </div>
-              <div className="priority-patient">
-                <div className="avatar rose">
-                  {priority.patient.name.slice(0, 1)}
-                </div>
-                <div>
-                  <strong>
-                    {priority.patient.name} · {priority.patient.age} 岁
-                  </strong>
-                  <span>
-                    {priority.consultation.dangerSignals.join("、") ||
-                      "高风险基础病史"}
-                  </span>
-                </div>
-              </div>
-              <div className="risk-reason">
-                <AlertTriangle size={18} />
-                <p>
-                  <strong>危险信号不可被 AI 降级</strong>
-                  <span>{priority.report?.aiRiskNote}</span>
-                </p>
-              </div>
-              <button
-                className="dark-button"
-                onClick={() => onPatient(priority)}
-              >
-                立即查看资料
-                <ArrowRight size={16} />
-              </button>
-            </div>
-          ) : (
-            <div className="panel priority-card">
-              <div className="priority-head">
-                <span>
-                  <ShieldCheck size={18} />
-                  暂无高风险患者
-                </span>
-              </div>
-            </div>
-          )}
-          <div className="panel schedule-card">
-            <div className="section-heading">
-              <div>
-                <h2>资料移交状态</h2>
-                <p>挂号成功后才允许医生访问</p>
-              </div>
-            </div>
-            {data.queue.slice(0, 3).map((item) => (
-              <div className="schedule-row" key={item.booking.id}>
-                <strong>
-                  {new Date(item.booking.appointmentAt).toLocaleTimeString(
-                    "zh-CN",
-                    { hour: "2-digit", minute: "2-digit" },
-                  )}
-                </strong>
-                <i />
-                <div>
-                  <span>{item.patient.name}</span>
-                  <small>{item.booking.department} · 报告已移交</small>
-                </div>
-                <em>已授权</em>
-              </div>
-            ))}
-          </div>
-        </aside>
-      </div>
+
+  useEffect(() => {
+    if (data?.queue?.length && !data.queue.some((item) => item.patient.id === selectedPatientId)) {
+      setSelectedPatientId(data.queue[0].patient.id);
+    }
+  }, [data, selectedPatientId]);
+
+  const consultPatientList = (data?.queue || []).map((item) => {
+    const dangerSignals = item.consultation?.dangerSignals || [];
+    return {
+      id: item.patient.id,
+      name: item.patient.name,
+      age: item.patient.age,
+      gender: item.patient.gender,
+      riskLevel: item.consultation?.riskLevel || 'low',
+      report: item.report,
+      source: item,
+      redFlags: {
+        labels: dangerSignals,
+        description: dangerSignals.join('、') || '当前未发现危险信号',
+        warning: item.report?.aiRiskNote || '当前未生成报告，请结合问诊记录继续判断。',
+      },
+      transferStatus: {
+        time: item.booking.appointmentAt,
+        name: item.patient.name,
+        department: item.booking.department || '未分配科室',
+        reportStatus: item.report ? '报告已移交' : '报告待生成',
+        accessStatus: item.booking.status === 'confirmed' ? '已授权' : '待授权',
+      },
+    };
+  });
+
+  const currentPatient = consultPatientList.find((p) => p.id === selectedPatientId) || consultPatientList[0];
+  if (!data) return error ? <EmptyState icon={AlertTriangle} title="无法读取接诊队列" message={error}/> : <DataLoading label="正在整理今日接诊患者队列"/>;
+  if (!currentPatient) return <EmptyState icon={Users} title="暂无今日接诊患者" message="当前工作台还没有可展示的患者。"/>;
+
+  const report = currentPatient.report || {};
+  const highRiskPatients = consultPatientList.filter((patient) => patient.riskLevel === 'high');
+  const priorityPatient = highRiskPatients[0] || currentPatient;
+  const transferPatients = [currentPatient, ...consultPatientList.filter((patient) => patient.id !== currentPatient.id)].slice(0, 3);
+  const formatTime = (value) => new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+
+  return <div className="page">
+    <div className="page-title"><div><span className="eyebrow"><Stethoscope size={15}/>临床工作台</span><h1>今日接诊工作台</h1><p>共 {data.summary.total} 位我的患者，{data.summary.highRisk} 位需要优先关注。</p></div><div className="date-control"><CalendarDays size={17}/>{new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}</div></div>
+    <section className="work-overview"><div className="subsection-heading"><div><span>今日工作概览</span><small>先处理风险和待办，再进入患者档案</small></div></div><div className="stats-grid doctor-stats"><StatCard icon={Users} tone="blue" label="我的患者" value={data.summary.total} detail={`${data.summary.pending} 位待接诊`} onClick={() => onPatientsView('today')}/><StatCard icon={AlertTriangle} tone="rose" label="高风险患者" value={data.summary.highRisk} detail="规则优先排序" onClick={() => onPatientsView('high')}/><StatCard icon={ClipboardCheck} tone="violet" label="待办随访" value={data.summary.followups} detail={`${data.summary.abnormalFollowups} 项异常关注`} onClick={() => setActive('followups')}/><StatCard icon={ShieldCheck} tone="green" label="资料访问" value="已审计" detail="查看行为自动留痕"/></div></section>
+    <div className="doctor-layout workbench-three-column">
+      <section className="panel patient-list-panel today-queue">
+        <div className="section-heading"><div><h2>今日接诊患者</h2><p>点击患者查看右侧预诊详情</p></div></div>
+        <div className="patient-table"><div className="table-head"><span>患者</span><span>风险</span><span>症状摘要</span><span>预约</span><span>状态</span></div>{data.queue.slice(0, 5).map((item) => <button type="button" aria-pressed={item.patient.id === currentPatient.id} className={`table-row ${item.patient.id === currentPatient.id ? 'selected' : ''}`} key={item.booking.id} onClick={() => setSelectedPatientId(item.patient.id)}><span className="patient-cell"><i className={`avatar ${riskAvatarClass(item.consultation?.riskLevel)}`}>{item.patient.name.slice(0, 1)}</i><span><strong>{item.patient.name}</strong><small>{item.patient.gender} · {item.patient.age} 岁</small></span></span><span><RiskBadge risk={riskLabel(item.consultation?.riskLevel)}/></span><span className="symptom-cell">{item.report?.chiefComplaint || '报告摘要待生成'}</span><span className="muted">{new Date(item.booking.appointmentAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span><span className="patient-status">{item.booking.status === 'completed' ? '已完成' : '待接诊'}</span></button>)}</div>
+      </section>
+
+      <section className="panel precheck-panel">
+        <div className="section-heading"><div><span className="eyebrow"><Sparkles size={14}/>AI 预问诊摘要</span><h2>{currentPatient.name} · 预诊详情</h2></div><RiskBadge risk={riskLabel(currentPatient.riskLevel)}/></div>
+        <div className="summary-highlight"><p>{report.chiefComplaint || '暂无结构化预诊主诉'}</p></div>
+        <div className="clinical-facts"><div><span>发作特点</span><strong>{report.episodeFeatures || '未采集'}</strong></div><div><span>诱发因素</span><strong>{report.triggers || '未采集'}</strong></div><div><span>伴随症状</span><strong>{report.accompanyingSymptoms || '未采集'}</strong></div><div><span>既往史</span><strong>{report.history || '未采集'}</strong></div></div>
+        <div className="danger-box"><AlertTriangle size={20}/><div><strong>{currentPatient.redFlags.labels.length ? `规则引擎标记：${currentPatient.redFlags.labels.join('、')}` : '当前未发现危险信号'}</strong><p>{currentPatient.redFlags.warning}</p></div></div>
+        <button type="button" className="dark-button" onClick={() => onPatient(currentPatient.source)}>查看患者资料<ArrowRight size={16}/></button>
+      </section>
+
+      <aside className="doctor-aside">
+        <div className="panel priority-card"><div className="priority-head"><span><Zap size={18}/>优先关注</span><em>{highRiskPatients.length} 位</em></div><p className="panel-caption">今日接诊队列中的高风险患者</p><div className="priority-list">{highRiskPatients.length ? highRiskPatients.map((patient) => <button type="button" className={`priority-patient priority-patient-button ${patient.id === currentPatient.id ? 'selected' : ''}`} key={patient.id} onClick={() => setSelectedPatientId(patient.id)}><div className={`avatar ${riskAvatarClass(patient.riskLevel)}`}>{patient.name.slice(0, 1)}</div><div><strong>{patient.name} · {patient.age} 岁</strong><span>{patient.redFlags.description}</span></div><time>{formatTime(patient.transferStatus.time)}</time></button>) : <div className="empty-inline">今日暂无高风险患者</div>}</div><div className="risk-reason"><AlertTriangle size={18}/><p><strong>{priorityPatient.redFlags.labels.length ? '发现危险信号' : '当前风险提示'}</strong><span>{priorityPatient.redFlags.warning}</span></p></div><button type="button" className="dark-button" onClick={() => onPatient(priorityPatient.source)}>立即查看资料<ArrowRight size={16}/></button></div>
+        <div className="panel schedule-card secondary-panel"><div className="section-heading"><div><h2>资料移交状态</h2><p>当前选中患者及相关资料状态</p></div></div>{transferPatients.map((patient) => <div className="schedule-row" key={patient.id}><strong>{formatTime(patient.transferStatus.time)}</strong><i/><div><span>{patient.transferStatus.name}</span><small>{patient.transferStatus.department} · {patient.transferStatus.reportStatus}</small></div><em>{patient.transferStatus.accessStatus}</em></div>)}</div>
+      </aside>
     </div>
-  );
+  </div>;
 }
 
-function LiveDoctorPatient({ queueItem, onBack }) {
+function LiveDoctorWorkspaceSelection({ onPatient, onPatientsView, setActive }) {
   const [data, setData] = useState(null);
-  const [message, setMessage] = useState("");
+  const [error, setError] = useState('');
+  const [selectedPatientId, setSelectedPatientId] = useState('');
+  useEffect(() => { api.doctorWorkbench().then(setData).catch((requestError) => setError(requestError.message)); }, []);
+  useEffect(() => {
+    if (data?.queue?.length && !data.queue.some((item) => item.patient.id === selectedPatientId)) setSelectedPatientId(data.queue[0].patient.id);
+  }, [data, selectedPatientId]);
+
+  const consultPatientList = (data?.queue || []).map((item) => {
+    const dangerSignals = item.consultation?.dangerSignals || [];
+    return {
+      id: item.patient.id,
+      name: item.patient.name,
+      age: item.patient.age,
+      gender: item.patient.gender,
+      riskLevel: item.consultation?.riskLevel || 'low',
+      report: item.report,
+      source: item,
+      redFlags: {
+        labels: dangerSignals,
+        description: dangerSignals.join('、') || '当前未发现危险信号',
+        warning: item.report?.aiRiskNote || '当前未生成报告，请结合问诊记录继续判断。',
+      },
+      transferStatus: {
+        time: item.booking.appointmentAt,
+        name: item.patient.name,
+        department: item.booking.department || '未分配科室',
+        reportStatus: item.report ? '报告已移交' : '报告待生成',
+        accessStatus: item.booking.status === 'confirmed' ? '已授权' : '待授权',
+      },
+    };
+  });
+  const currentPatient = consultPatientList.find((patient) => patient.id === selectedPatientId) || consultPatientList[0];
+  if (!data) return error ? <EmptyState icon={AlertTriangle} title="无法读取接诊队列" message={error}/> : <DataLoading label="正在按风险等级整理患者队列…"/>;
+  if (!currentPatient) return <EmptyState icon={Users} title="暂无今日接诊患者" message="当前工作台还没有可展示的患者。"/>;
+  const transferPatients = [currentPatient, ...consultPatientList.filter((patient) => patient.id !== currentPatient.id)].slice(0, 3);
+  return <div className="page"><div className="page-title"><div><span className="eyebrow"><Stethoscope size={15}/>临床工作台</span><h1>今日接诊工作台</h1><p>共 {data.summary.total} 位我的患者，{data.summary.highRisk} 位需要优先关注。</p></div><div className="date-control"><CalendarDays size={17}/>{new Date().toLocaleDateString('zh-CN',{year:'numeric',month:'long',day:'numeric'})}</div></div>
+    <section className="work-overview"><div className="subsection-heading"><div><span>今日工作概览</span><small>先处理风险和待办，再进入患者档案</small></div></div><div className="stats-grid doctor-stats"><StatCard icon={Users} tone="blue" label="我的患者" value={data.summary.total} detail={`${data.summary.pending} 位待接诊`} onClick={() => onPatientsView('today')}/><StatCard icon={AlertTriangle} tone="rose" label="高风险患者" value={data.summary.highRisk} detail="规则优先排序" onClick={() => onPatientsView('high')}/><StatCard icon={ClipboardCheck} tone="violet" label="待办随访" value={data.summary.followups} detail={`${data.summary.abnormalFollowups} 项异常关注`} onClick={() => setActive('followups')}/><StatCard icon={ShieldCheck} tone="green" label="资料访问" value="已审计" detail="查看行为自动留痕"/></div></section>
+    <div className="doctor-layout"><section className="panel patient-list-panel today-queue"><div className="section-heading"><div><h2>今日接诊队列</h2><p>今天需要处理的患者，按风险程度和预约时间排序</p></div></div><div className="patient-table"><div className="table-head"><span>患者</span><span>风险</span><span>症状摘要</span><span>预约时间</span><span>状态</span></div>{data.queue.map((item) => <button type="button" className={`table-row ${item.patient.id === currentPatient.id ? 'selected' : ''}`} key={item.booking.id} onClick={() => setSelectedPatientId(item.patient.id)}><span className="patient-cell"><i className={`avatar ${riskAvatarClass(item.consultation?.riskLevel)}`}>{item.patient.name.slice(0,1)}</i><span><strong>{item.patient.name}</strong><small>{item.patient.gender} · {item.patient.age} 岁</small></span></span><span><RiskBadge risk={riskLabel(item.consultation?.riskLevel)}/></span><span className="symptom-cell">{item.report?.chiefComplaint || '报告摘要待生成'}</span><span className="muted">{new Date(item.booking.appointmentAt).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span><span className="patient-status">{item.booking.status === 'completed' ? '已完成' : '待接诊'}</span></button>)}</div></section><aside className="doctor-aside"><div className="panel priority-card"><div className="priority-head"><span><Zap size={18}/>优先关注</span><em>{riskLabel(currentPatient.riskLevel)}风险</em></div><div className="priority-patient"><div className={`avatar ${riskAvatarClass(currentPatient.riskLevel)}`}>{currentPatient.name.slice(0,1)}</div><div><strong>{currentPatient.name} · {currentPatient.age} 岁</strong><span>{currentPatient.redFlags.description}</span></div></div><div className="risk-reason"><AlertTriangle size={18}/><p><strong>{currentPatient.redFlags.labels.length ? '发现危险信号' : '当前风险提示'}</strong><span>{currentPatient.redFlags.warning}</span></p></div><button type="button" className="dark-button" onClick={() => onPatient(currentPatient.source)}>立即查看资料<ArrowRight size={16}/></button></div><div className="panel schedule-card secondary-panel"><div className="section-heading"><div><h2>资料移交状态</h2><p>当前选中患者及相关资料状态</p></div></div>{transferPatients.map((patient) => <div className="schedule-row" key={patient.id}><strong>{new Date(patient.transferStatus.time).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}</strong><i/><div><span>{patient.transferStatus.name}</span><small>{patient.transferStatus.department} · {patient.transferStatus.reportStatus}</small></div><em>{patient.transferStatus.accessStatus}</em></div>)}</div></aside></div>
+  </div>;
+}
+
+function LiveDoctorWorkspaceLegacy({ onPatient, onPatientsView, setActive }) {
+  const [data, setData] = useState(null); const [error, setError] = useState('');
+  useEffect(() => { api.doctorWorkbench().then(setData).catch((requestError) => setError(requestError.message)); }, []);
+  if (!data) return error ? <EmptyState icon={AlertTriangle} title="无法读取接诊队列" message={error}/> : <DataLoading label="正在按风险等级整理患者队列…"/>;
+  const priority = data.queue.find((item) => item.consultation?.riskLevel === 'high');
+  const openPatient = (item) => { if (item?.patient?.id) onPatient(item); };
+  return <div className="page"><div className="page-title"><div><span className="eyebrow"><Stethoscope size={15}/>临床工作台</span><h1>今日接诊工作台</h1><p>共 {data.summary.total} 位我的患者，{data.summary.highRisk} 位需要优先关注。</p></div><div className="date-control"><CalendarDays size={17}/>{new Date().toLocaleDateString('zh-CN',{year:'numeric',month:'long',day:'numeric'})}</div></div>
+        <section className="work-overview"><div className="subsection-heading"><div><span>今日工作概览</span><small>先处理风险和待办，再进入患者档案</small></div></div><div className="stats-grid doctor-stats"><StatCard icon={Users} tone="blue" label="我的患者" value={data.summary.total} detail={`${data.summary.pending} 位待接诊`} onClick={() => onPatientsView('today')}/><StatCard icon={AlertTriangle} tone="rose" label="高风险患者" value={data.summary.highRisk} detail="规则优先排序" onClick={() => onPatientsView('high')}/><StatCard icon={ClipboardCheck} tone="violet" label="待办随访" value={data.summary.followups} detail={`${data.summary.abnormalFollowups} 项异常关注`} onClick={() => setActive('followups')}/><StatCard icon={ShieldCheck} tone="green" label="资料访问" value="已审计" detail="查看行为自动留痕"/></div></section>
+      <div className="doctor-layout"><section className="panel patient-list-panel today-queue"><div className="section-heading"><div><h2>今日接诊队列</h2><p>今天需要处理的患者，按风险程度和预约时间排序</p></div></div><div className="patient-table"><div className="table-head"><span>患者</span><span>风险</span><span>症状摘要</span><span>预约时间</span><span>状态</span></div>{data.queue.map((item)=><button type="button" className="table-row" key={item.booking.id} onClick={() => openPatient(item)}><span className="patient-cell"><i className={`avatar ${riskAvatarClass(item.consultation?.riskLevel)}`}>{item.patient.name.slice(0,1)}</i><span><strong>{item.patient.name}</strong><small>{item.patient.gender} · {item.patient.age} 岁</small></span></span><span><RiskBadge risk={riskLabel(item.consultation?.riskLevel)}/></span><span className="symptom-cell">{item.report?.chiefComplaint || '报告摘要待生成'}</span><span className="muted">{new Date(item.booking.appointmentAt).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span><span className="patient-status">{item.booking.status === 'completed' ? '已完成' : '待接诊'}</span></button>)}</div></section><aside className="doctor-aside"><div className="panel priority-card"><div className="priority-head"><span><Zap size={18}/>优先关注</span><em>规则引擎</em></div><div className="priority-patient"><div className={`avatar ${riskAvatarClass(priority.consultation?.riskLevel)}`}>{priority.patient.name.slice(0,1)}</div><div><strong>{priority.patient.name} · {priority.patient.age} 岁</strong><span>{priority.consultation.dangerSignals.join('、') || '高风险基础病史'}</span></div></div><div className="risk-reason"><AlertTriangle size={18}/><p><strong>危险信号不可被 AI 降级</strong><span>{priority.report?.aiRiskNote}</span></p></div><button type="button" className="dark-button" onClick={() => openPatient(priority)}>立即查看资料<ArrowRight size={16}/></button></div><div className="panel schedule-card secondary-panel"><div className="section-heading"><div><h2>资料移交状态</h2><p>挂号成功后才允许医生访问</p></div></div>{data.queue.slice(0,3).map((item)=><div className="schedule-row" key={item.booking.id}><strong>{new Date(item.booking.appointmentAt).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}</strong><i/><div><span>{item.patient.name}</span><small>{item.booking.department} · 报告已移交</small></div><em>已授权</em></div>)}</div></aside></div></div>;
+  }
+
+function LiveDoctorPatient({ queueItem, onBack, backLabel }) {
+  const [data, setData] = useState(null);
+  const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
   const [analysis, setAnalysis] = useState(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
-  const [form, setForm] = useState({
-    diagnosis: "",
-    examination: "",
-    treatment: "",
-    medication: "",
-    rehabilitation: "",
-    revisitAt: "",
-    followupPlan: "",
-  });
-  useEffect(() => {
-    api
-      .doctorPatient(queueItem.patient.id)
-      .then(setData)
-      .catch((error) => setMessage(error.message));
-  }, [queueItem.patient.id]);
+  const [question, setQuestion] = useState('');
+  const [qaMessages, setQaMessages] = useState([]);
+  const [qaLoading, setQaLoading] = useState(false);
+  const [form, setForm] = useState({ diagnosis: '', examination: '', treatment: '', medication: '', rehabilitation: '', revisitAt: '', followupPlan: '' });
+
+  useEffect(() => { api.doctorPatient(queueItem.patient.id).then(setData).catch((error) => setMessage(error.message)); }, [queueItem.patient.id]);
+
   async function save() {
-    if (!form.diagnosis.trim()) {
-      setMessage("请填写临床诊断或诊断考虑");
-      return;
-    }
+    if (!form.diagnosis.trim()) { setMessage('请填写临床诊断或诊断考虑'); return; }
     setSaving(true);
     try {
-      await api.createDisposition({
-        ...form,
-        patientId: queueItem.patient.id,
-        consultationId: queueItem.consultation.id,
-      });
-      setMessage("处置记录已保存，并与 AI 风险提示分开存储。");
-      const next = await api.doctorPatient(queueItem.patient.id);
-      setData(next);
-    } catch (error) {
-      setMessage(error.message);
-    } finally {
-      setSaving(false);
-    }
+      await api.createDisposition({ ...form, patientId: queueItem.patient.id, consultationId: queueItem.consultation.id });
+      setMessage('处置记录已保存，并与 AI 风险提示分开存储。');
+      setData(await api.doctorPatient(queueItem.patient.id));
+    } catch (error) { setMessage(error.message); }
+    finally { setSaving(false); }
   }
+
   async function downloadUpload(item) {
-    const response = await fetch(`/api/v1/uploads/${item.id}/download`, {
-      headers: { Authorization: `Bearer ${getAuthToken()}` },
-    });
-    if (!response.ok) {
-      setMessage("资料下载失败");
-      return;
-    }
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = item.name;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    const response = await fetch(`/api/v1/uploads/${item.id}/download`, { headers: { Authorization: `Bearer ${getAuthToken()}` } });
+    if (!response.ok) { setMessage('资料下载失败'); return; }
+    const blob = await response.blob(); const url = URL.createObjectURL(blob); const anchor = document.createElement('a');
+    anchor.href = url; anchor.download = item.name; anchor.click(); URL.revokeObjectURL(url);
   }
+
   async function generateAnalysis() {
-    setAnalysisLoading(true);
+    setAnalysisLoading(true); setMessage('正在请求 AI 辅助分析…');
     try {
       const result = await api.doctorAnalysis(queueItem.patient.id);
-      setAnalysis(result.analysis);
-      setMessage("AI 辅助分析已更新；结果仅供医生参考。");
-    } catch (error) {
-      setMessage(error.message);
-    } finally {
-      setAnalysisLoading(false);
-    }
+      setAnalysis(result.analysis); setQaMessages([]); setMessage('AI 辅助分析已更新；结果仅供医生参考。');
+    } catch (error) { setMessage(error.message || 'AI 辅助分析暂时不可用，请稍后重试。'); }
+    finally { setAnalysisLoading(false); }
   }
-  if (!data)
-    return message ? (
-      <EmptyState
-        icon={AlertTriangle}
-        title="无法读取患者资料"
-        message={message}
-        action="返回队列"
-        onAction={onBack}
-      />
-    ) : (
-      <DataLoading label="正在读取患者授权资料并记录审计…" />
-    );
-  const report =
-    data.reports.find(
-      (item) => item.consultationId === queueItem.consultation.id,
-    ) || data.reports[0];
-  const messages = data.messages.filter(
-    (item) => item.consultationId === queueItem.consultation.id,
-  );
-  return (
-    <div className="page patient-detail">
-      <button className="back-button" onClick={onBack}>
-        <ArrowLeft size={17} />
-        返回患者队列
-      </button>
-      <div className="detail-head">
-        <div className="avatar xl rose">{data.patient.name.slice(0, 1)}</div>
-        <div>
-          <div className="name-line">
-            <h1>{data.patient.name}</h1>
-            <RiskBadge risk={riskLabel(queueItem.consultation.riskLevel)} />
-          </div>
-          <p>
-            {data.patient.gender} · {data.patient.age} 岁 · 患者编号{" "}
-            {data.patient.id}
-          </p>
-        </div>
-        <div className="detail-actions">
-          <span className="reference-label">
-            <ShieldCheck size={13} />
-            访问已审计
-          </span>
-        </div>
-      </div>
-      {message && (
-        <div
-          className={`inline-feedback ${message.includes("已保存") ? "success" : ""}`}
-        >
-          {message}
-        </div>
-      )}
-      <div className="detail-grid">
-        <section>
-          <div className="panel clinical-summary">
-            <div className="section-heading">
-              <div>
-                <span className="eyebrow">
-                  <Sparkles size={14} />
-                  AI 问诊摘要
-                </span>
-                <h2>症状与风险概览</h2>
-              </div>
-              <span className="reference-label">仅供辅助参考</span>
-            </div>
-            <div className="summary-highlight">
-              <p>{report?.chiefComplaint || "暂无结构化摘要"}</p>
-            </div>
-            <div className="clinical-facts">
-              <div>
-                <span>发作特点</span>
-                <strong>{report?.episodeFeatures || "未采集"}</strong>
-              </div>
-              <div>
-                <span>诱发因素</span>
-                <strong>{report?.triggers || "未采集"}</strong>
-              </div>
-              <div>
-                <span>伴随症状</span>
-                <strong>{report?.accompanyingSymptoms || "未采集"}</strong>
-              </div>
-              <div>
-                <span>既往史</span>
-                <strong>{report?.history || "未采集"}</strong>
-              </div>
-            </div>
-            {queueItem.consultation.dangerSignals.length > 0 && (
-              <div className="danger-box">
-                <AlertTriangle size={20} />
-                <div>
-                  <strong>
-                    规则引擎标记：
-                    {queueItem.consultation.dangerSignals.join("、")}
-                  </strong>
-                  <p>
-                    危险信号优先级高于模型判断，请优先完成人工复核与必要检查。
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-          <div className="panel timeline-panel">
-            <h2>原始问诊对话</h2>
-            <div className="conversation-record">
-              {messages.map((item) => (
-                <div className={item.role} key={item.id}>
-                  <span>
-                    {item.role === "user" ? data.patient.name : "AI 助手"}
-                  </span>
-                  <p>{item.content}</p>
-                  <time>
-                    {new Date(item.createdAt).toLocaleString("zh-CN")}
-                  </time>
-                </div>
-              ))}
-            </div>
-          </div>
-          {data.uploads.length > 0 && (
-            <div className="panel timeline-panel">
-              <h2>患者补充资料</h2>
-              <div className="mini-documents">
-                {data.uploads.map((item) => (
-                  <button key={item.id} onClick={() => downloadUpload(item)}>
-                    <FileText size={17} />
-                    <span>
-                      {item.name}
-                      <small>
-                        {item.category} · {(item.size / 1024).toFixed(1)}KB
-                      </small>
-                    </span>
-                    <ChevronRight size={16} />
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          {data.dispositions.length > 0 && (
-            <div className="panel timeline-panel">
-              <h2>历史处置记录</h2>
-              {data.dispositions.map((item) => (
-                <div className="saved-disposition" key={item.id}>
-                  <strong>{item.diagnosis}</strong>
-                  <span>
-                    {new Date(item.submittedAt).toLocaleString("zh-CN")}
-                  </span>
-                  <p>
-                    {item.examination} {item.treatment}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-        <aside>
-          <div className="panel ai-assist">
-            <div className="side-title">
-              <span>AI 辅助分析</span>
-              <Bot size={18} />
-            </div>
-            {analysis ? (
-              <>
-                <div className="assist-block">
-                  <span>症状要点</span>
-                  <ul>
-                    {analysis.symptomHighlights.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="assist-block">
-                  <span>建议进一步追问</span>
-                  <ul>
-                    {analysis.followupQuestions.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="assist-block">
-                  <span>鉴别方向</span>
-                  <div className="check-tags">
-                    {analysis.differentialDirections.map((item) => (
-                      <b key={item}>{item}</b>
-                    ))}
-                  </div>
-                </div>
-                <div className="assist-block">
-                  <span>建议检查</span>
-                  <div className="check-tags">
-                    {analysis.suggestedExams.map((item) => (
-                      <b key={item}>{item}</b>
-                    ))}
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="assist-block">
-                <span>当前结构化摘要</span>
-                <p>{report?.aiRiskNote || "请结合问诊对话人工分析"}</p>
-              </div>
-            )}
-            <button
-              className="soft-button full"
-              disabled={analysisLoading}
-              onClick={generateAnalysis}
-            >
-              <Sparkles size={16} />
-              {analysisLoading
-                ? "模型分析中…"
-                : analysis
-                  ? "重新生成分析"
-                  : "生成结构化分析"}
-            </button>
-            <p className="assist-note">
-              仅供参考，最终判断由医生完成；不会覆盖医生意见。
-            </p>
-          </div>
-          <div className="panel record-form">
-            <h2>医生处置记录</h2>
-            <label>
-              临床诊断 / 诊断考虑 *
-              <textarea
-                value={form.diagnosis}
-                onChange={(e) =>
-                  setForm({ ...form, diagnosis: e.target.value })
-                }
-                placeholder="由医生填写，不覆盖 AI 风险提示…"
-              />
-            </label>
-            <label>
-              检查意见
-              <textarea
-                value={form.examination}
-                onChange={(e) =>
-                  setForm({ ...form, examination: e.target.value })
-                }
-              />
-            </label>
-            <label>
-              治疗与用药建议
-              <textarea
-                value={`${form.treatment}${form.treatment && form.medication ? "\n" : ""}${form.medication}`}
-                onChange={(e) =>
-                  setForm({ ...form, treatment: e.target.value })
-                }
-              />
-            </label>
-            <div className="form-row">
-              <label>
-                复诊时间
-                <input
-                  type="datetime-local"
-                  value={form.revisitAt}
-                  onChange={(e) =>
-                    setForm({ ...form, revisitAt: e.target.value })
-                  }
-                />
-              </label>
-              <label>
-                随访计划
-                <select
-                  value={form.followupPlan}
-                  onChange={(e) =>
-                    setForm({ ...form, followupPlan: e.target.value })
-                  }
-                >
-                  <option value="">暂不安排</option>
-                  <option value="3 天后症状随访">3 天后</option>
-                  <option value="7 天后症状随访">7 天后</option>
-                </select>
-              </label>
-            </div>
-            <button
-              className="primary-button full"
-              disabled={saving}
-              onClick={save}
-            >
-              {saving ? "保存中…" : "保存处置记录"}
-            </button>
-          </div>
-        </aside>
-      </div>
+
+  async function askQuestion(event) {
+    event.preventDefault();
+    const nextQuestion = question.trim();
+    if (!nextQuestion || qaLoading || !analysis) return;
+    const history = qaMessages;
+    setQaMessages((current) => [...current, { role: 'doctor', content: nextQuestion }]);
+    setQuestion(''); setQaLoading(true); setMessage('正在请求模型回答追问…');
+    try {
+      const result = await api.doctorQuestion(queueItem.patient.id, nextQuestion, analysis, history);
+      setQaMessages((current) => [...current, { role: 'assistant', content: result.answer }]);
+      setMessage('追问已完成；请结合查体和检查结果作最终判断。');
+    } catch (error) {
+      setMessage(error.message || '追问暂时不可用，请稍后重试。');
+    } finally { setQaLoading(false); }
+  }
+
+  if (!data) return message ? <EmptyState icon={AlertTriangle} title="无法读取患者资料" message={message} action="返回队列" onAction={onBack}/> : <DataLoading label="正在读取患者授权资料并记录审计"/>;
+  const report = data.reports.find((item) => item.consultationId === queueItem.consultation.id) || data.reports[0];
+  const messages = data.messages.filter((item) => item.consultationId === queueItem.consultation.id);
+  const dangerSignals = queueItem.consultation?.dangerSignals || [];
+  return <div className="page patient-detail">
+    <button className="back-button" onClick={onBack}><ArrowLeft size={17}/>{backLabel}</button>
+    <div className="detail-head"><div className={`avatar xl ${riskAvatarClass(queueItem.consultation?.riskLevel)}`}>{data.patient.name.slice(0, 1)}</div><div><div className="name-line"><h1>{data.patient.name}</h1><RiskBadge risk={riskLabel(queueItem.consultation.riskLevel)}/></div><p>{data.patient.gender} · {data.patient.age} 岁 · 患者编号 {data.patient.id}</p></div></div>
+    {message && <div className="inline-feedback">{message}</div>}
+    <div className="detail-grid">
+      <section>
+        <div className="panel clinical-summary"><div className="section-heading"><div><span className="eyebrow"><Sparkles size={14}/>AI 问诊摘要</span><h2>症状与风险概览</h2></div><span className="reference-label">仅供辅助参考</span></div><div className="summary-highlight"><p>{report?.chiefComplaint || '暂无结构化摘要'}</p></div><div className="clinical-facts"><div><span>发作特点</span><strong>{report?.episodeFeatures || '未采集'}</strong></div><div><span>诱发因素</span><strong>{report?.triggers || '未采集'}</strong></div><div><span>伴随症状</span><strong>{report?.accompanyingSymptoms || '未采集'}</strong></div><div><span>既往史</span><strong>{report?.history || '未采集'}</strong></div></div>{dangerSignals.length > 0 && <div className="danger-box"><AlertTriangle size={20}/><div><strong>规则引擎标记：{dangerSignals.join('、')}</strong><p>危险信号优先级高于模型判断，请优先完成人工复核与必要检查。</p></div></div>}</div>
+        <div className="panel timeline-panel"><h2>原始问诊对话</h2><div className="conversation-record">{messages.map((item) => <div className={item.role} key={item.id}><span>{item.role === 'user' ? data.patient.name : 'AI 助手'}</span><p>{item.content}</p><time>{new Date(item.createdAt).toLocaleString('zh-CN')}</time></div>)}</div></div>
+        {data.uploads.length > 0 && <div className="panel timeline-panel"><h2>患者补充资料</h2><div className="mini-documents">{data.uploads.map((item) => <button key={item.id} onClick={() => downloadUpload(item)}><FileText size={17}/><span>{item.name}<small>{item.category} · {(item.size / 1024).toFixed(1)}KB</small></span><ChevronRight size={16}/></button>)}</div></div>}
+        {data.dispositions.length > 0 && <div className="panel timeline-panel"><h2>历史处置记录</h2>{data.dispositions.map((item) => <div className="saved-disposition" key={item.id}><strong>{item.diagnosis}</strong><span>{new Date(item.submittedAt).toLocaleString('zh-CN')}</span><p>{item.examination} {item.treatment}</p></div>)}</div>}
+      </section>
+      <aside>
+        <div className="panel ai-assist"><div className="side-title"><span>AI 辅助分析</span><Bot size={18}/></div>{analysis ? <><div className="assist-block"><span>症状要点</span><ul>{analysis.symptomHighlights.map((item) => <li key={item}>{item}</li>)}</ul></div><div className="assist-block"><span>建议进一步追问</span><ul>{analysis.followupQuestions.map((item) => <li key={item}>{item}</li>)}</ul></div><div className="assist-block"><span>鉴别方向</span><div className="check-tags">{analysis.differentialDirections.map((item) => <b key={item}>{item}</b>)}</div></div><div className="assist-block"><span>建议检查</span><div className="check-tags">{analysis.suggestedExams.map((item) => <b key={item}>{item}</b>)}</div></div></> : <div className="assist-block"><span>当前结构化摘要</span><p>{report?.aiRiskNote || '请结合问诊对话人工分析'}</p></div>}<button className="soft-button full" disabled={analysisLoading} onClick={generateAnalysis}><Sparkles size={16}/>{analysisLoading ? '模型分析中…' : analysis ? '重新生成分析' : '生成结构化分析'}</button><p className="assist-note">仅供参考，最终判断由医生完成；不会覆盖医生意见。</p></div>
+        {analysis && <div className="panel ai-qa"><div className="side-title"><span>继续追问</span><MessageCircleMore size={18}/></div><div className="qa-messages">{qaMessages.map((item, index) => <div className={`qa-message ${item.role}`} key={`${item.role}-${index}`}><span>{item.role === 'doctor' ? '医生' : 'AI 助手'}</span><p>{item.content}</p></div>)}</div><form className="ai-question-form" onSubmit={askQuestion}><textarea value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="针对当前患者继续提问，例如：还需要补充哪些查体信息？" disabled={qaLoading}/><button type="submit" className="primary-button full" disabled={qaLoading || !question.trim()}><Send size={16}/>{qaLoading ? '回答中…' : '发送追问'}</button></form><p className="assist-note">问答结果仅供辅助参考，不替代医生诊断。</p></div>}
+        <div className="panel record-form"><h2>医生处置记录</h2><label>临床诊断 / 诊断考虑 *<textarea value={form.diagnosis} onChange={(event) => setForm({ ...form, diagnosis: event.target.value })} placeholder="由医生填写，不覆盖 AI 风险提示…"/></label><label>检查意见<textarea value={form.examination} onChange={(event) => setForm({ ...form, examination: event.target.value })}/></label><label>治疗与用药建议<textarea value={`${form.treatment}${form.treatment && form.medication ? '\n' : ''}${form.medication}`} onChange={(event) => setForm({ ...form, treatment: event.target.value })}/></label><div className="form-row"><label>复诊时间<input type="datetime-local" value={form.revisitAt} onChange={(event) => setForm({ ...form, revisitAt: event.target.value })}/></label><label>随访计划<select value={form.followupPlan} onChange={(event) => setForm({ ...form, followupPlan: event.target.value })}><option value="">暂不安排</option><option value="3 天后症状随访">3 天后</option><option value="7 天后症状随访">7 天后</option></select></label></div><button className="primary-button full" disabled={saving} onClick={save}>{saving ? '保存中…' : '保存处置记录'}</button></div>
+      </aside>
     </div>
-  );
+  </div>;
 }
 
-function LiveDoctorFollowups() {
+function LiveDoctorPatientLegacy({ queueItem, onBack, backLabel }) {
+  const [data,setData]=useState(null); const [message,setMessage]=useState(''); const [saving,setSaving]=useState(false);
+  const [analysis,setAnalysis]=useState(null); const [analysisLoading,setAnalysisLoading]=useState(false);
+  const [form,setForm]=useState({diagnosis:'',examination:'',treatment:'',medication:'',rehabilitation:'',revisitAt:'',followupPlan:''});
+  useEffect(()=>{api.doctorPatient(queueItem.patient.id).then(setData).catch((error)=>setMessage(error.message));},[queueItem.patient.id]);
+  async function save(){if(!form.diagnosis.trim()){setMessage('请填写临床诊断或诊断考虑');return}setSaving(true);try{await api.createDisposition({...form,patientId:queueItem.patient.id,consultationId:queueItem.consultation.id});setMessage('处置记录已保存，并与 AI 风险提示分开存储。');const next=await api.doctorPatient(queueItem.patient.id);setData(next)}catch(error){setMessage(error.message)}finally{setSaving(false)}}
+  async function downloadUpload(item){const response=await fetch(`/api/v1/uploads/${item.id}/download`,{headers:{Authorization:`Bearer ${getAuthToken()}`}});if(!response.ok){setMessage('资料下载失败');return}const blob=await response.blob();const url=URL.createObjectURL(blob);const anchor=document.createElement('a');anchor.href=url;anchor.download=item.name;anchor.click();URL.revokeObjectURL(url)}
+  async function generateAnalysis(){setAnalysisLoading(true);setMessage('正在请求 AI 辅助分析…');try{const result=await api.doctorAnalysis(queueItem.patient.id);setAnalysis(result.analysis);setMessage('AI 辅助分析已更新；结果仅供医生参考。')}catch(error){const feedback=error.message||'AI 辅助分析暂时不可用，请稍后重试。';setMessage(feedback);window.alert(feedback)}finally{setAnalysisLoading(false)}}
+  if(!data)return message?<EmptyState icon={AlertTriangle} title="无法读取患者资料" message={message} action="返回队列" onAction={onBack}/>:<DataLoading label="正在读取患者授权资料并记录审计…"/>;
+  const report=data.reports.find((item)=>item.consultationId===queueItem.consultation.id)||data.reports[0];
+  const messages=data.messages.filter((item)=>item.consultationId===queueItem.consultation.id);
+  return <div className="page patient-detail"><button className="back-button" onClick={onBack}><ArrowLeft size={17}/>{backLabel}</button><div className="detail-head"><div className={`avatar xl ${riskAvatarClass(queueItem.consultation?.riskLevel)}`}>{data.patient.name.slice(0,1)}</div><div><div className="name-line"><h1>{data.patient.name}</h1><RiskBadge risk={riskLabel(queueItem.consultation.riskLevel)}/></div><p>{data.patient.gender} · {data.patient.age} 岁 · 患者编号 {data.patient.id}</p></div></div>
+    <div className="detail-grid"><section><div className="panel clinical-summary"><div className="section-heading"><div><span className="eyebrow"><Sparkles size={14}/>AI 问诊摘要</span><h2>症状与风险概览</h2></div><span className="reference-label">仅供辅助参考</span></div><div className="summary-highlight"><p>{report?.chiefComplaint||'暂无结构化摘要'}</p></div><div className="clinical-facts"><div><span>发作特点</span><strong>{report?.episodeFeatures||'未采集'}</strong></div><div><span>诱发因素</span><strong>{report?.triggers||'未采集'}</strong></div><div><span>伴随症状</span><strong>{report?.accompanyingSymptoms||'未采集'}</strong></div><div><span>既往史</span><strong>{report?.history||'未采集'}</strong></div></div>{queueItem.consultation.dangerSignals.length>0&&<div className="danger-box"><AlertTriangle size={20}/><div><strong>规则引擎标记：{queueItem.consultation.dangerSignals.join('、')}</strong><p>危险信号优先级高于模型判断，请优先完成人工复核与必要检查。</p></div></div>}</div>
+      <div className="panel timeline-panel"><h2>原始问诊对话</h2><div className="conversation-record">{messages.map((item)=><div className={item.role} key={item.id}><span>{item.role==='user'?data.patient.name:'AI 助手'}</span><p>{item.content}</p><time>{new Date(item.createdAt).toLocaleString('zh-CN')}</time></div>)}</div></div>{data.uploads.length>0&&<div className="panel timeline-panel"><h2>患者补充资料</h2><div className="mini-documents">{data.uploads.map((item)=><button key={item.id} onClick={()=>downloadUpload(item)}><FileText size={17}/><span>{item.name}<small>{item.category} · {(item.size/1024).toFixed(1)}KB</small></span><ChevronRight size={16}/></button>)}</div></div>}{data.dispositions.length>0&&<div className="panel timeline-panel"><h2>历史处置记录</h2>{data.dispositions.map((item)=><div className="saved-disposition" key={item.id}><strong>{item.diagnosis}</strong><span>{new Date(item.submittedAt).toLocaleString('zh-CN')}</span><p>{item.examination} {item.treatment}</p></div>)}</div>}</section>
+      <aside><div className="panel ai-assist"><div className="side-title"><span>AI 辅助分析</span><Bot size={18}/></div>{analysis?<><div className="assist-block"><span>症状要点</span><ul>{analysis.symptomHighlights.map((item)=><li key={item}>{item}</li>)}</ul></div><div className="assist-block"><span>建议进一步追问</span><ul>{analysis.followupQuestions.map((item)=><li key={item}>{item}</li>)}</ul></div><div className="assist-block"><span>鉴别方向</span><div className="check-tags">{analysis.differentialDirections.map((item)=><b key={item}>{item}</b>)}</div></div><div className="assist-block"><span>建议检查</span><div className="check-tags">{analysis.suggestedExams.map((item)=><b key={item}>{item}</b>)}</div></div></>:<div className="assist-block"><span>当前结构化摘要</span><p>{report?.aiRiskNote||'请结合问诊对话人工分析'}</p></div>}<button className="soft-button full" disabled={analysisLoading} onClick={generateAnalysis}><Sparkles size={16}/>{analysisLoading?'模型分析中…':analysis?'重新生成分析':'生成结构化分析'}</button><p className="assist-note">仅供参考，最终判断由医生完成；不会覆盖医生意见。</p></div><div className="panel record-form"><h2>医生处置记录</h2><label>临床诊断 / 诊断考虑 *<textarea value={form.diagnosis} onChange={(e)=>setForm({...form,diagnosis:e.target.value})} placeholder="由医生填写，不覆盖 AI 风险提示…"/></label><label>检查意见<textarea value={form.examination} onChange={(e)=>setForm({...form,examination:e.target.value})}/></label><label>治疗与用药建议<textarea value={`${form.treatment}${form.treatment&&form.medication?'\n':''}${form.medication}`} onChange={(e)=>setForm({...form,treatment:e.target.value})}/></label><div className="form-row"><label>复诊时间<input type="datetime-local" value={form.revisitAt} onChange={(e)=>setForm({...form,revisitAt:e.target.value})}/></label><label>随访计划<select value={form.followupPlan} onChange={(e)=>setForm({...form,followupPlan:e.target.value})}><option value="">暂不安排</option><option value="3 天后症状随访">3 天后</option><option value="7 天后症状随访">7 天后</option></select></label></div><button className="primary-button full" disabled={saving} onClick={save}>{saving?'保存中…':'保存处置记录'}</button></div></aside></div>
+      </div>;
+}
+
+function LiveDoctorFollowupsOverview() {
+  const [items, setItems] = useState([]);
+  const [focus, setFocus] = useState('all');
+  useEffect(() => { api.followups().then((result) => setItems(result.followups)).catch(() => setItems([])); }, []);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const counts = {
+    pending: items.filter((item) => item.status === 'pending').length,
+    dueToday: items.filter((item) => item.status === 'pending' && item.dueAt?.slice(0, 10) === today).length,
+    abnormal: items.filter((item) => item.abnormal).length,
+    completed: items.filter((item) => item.status === 'completed').length,
+  };
+  function chooseFocus(nextFocus) {
+    setFocus((current) => current === nextFocus ? 'all' : nextFocus);
+    requestAnimationFrame(() => document.getElementById('followup-task-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }
+
+  return <div className="page followup-page">
+    <div className="page-title"><div><span className="eyebrow"><ClipboardCheck size={15}/>诊后管理</span><h1>随访任务</h1><p>优先处理今日到期和异常反馈，任务详情沿用现有工作流。</p></div></div>
+    <div className="followup-summary">
+      <button type="button" className={`followup-summary-card ${focus === 'pending' ? 'active' : ''}`} aria-pressed={focus === 'pending'} onClick={() => chooseFocus('pending')}><span>待处理</span><strong>{counts.pending}</strong></button>
+      <button type="button" className={`followup-summary-card ${focus === 'dueToday' ? 'active' : ''}`} aria-pressed={focus === 'dueToday'} onClick={() => chooseFocus('dueToday')}><span>今日到期</span><strong>{counts.dueToday}</strong></button>
+      <button type="button" className={`followup-summary-card ${focus === 'abnormal' ? 'active' : ''}`} aria-pressed={focus === 'abnormal'} onClick={() => chooseFocus('abnormal')}><span>异常反馈</span><strong>{counts.abnormal}</strong></button>
+      <button type="button" className={`followup-summary-card ${focus === 'completed' ? 'active' : ''}`} aria-pressed={focus === 'completed'} onClick={() => chooseFocus('completed')}><span>已完成</span><strong>{counts.completed}</strong></button>
+    </div>
+    <LiveDoctorFollowups focus={focus}/>
+  </div>;
+}
+
+function LiveDoctorFollowupsOverviewLegacy() {
+  const [items, setItems] = useState([]);
+  useEffect(() => { api.followups().then((result) => setItems(result.followups)).catch(() => setItems([])); }, []);
+  const today = new Date().toISOString().slice(0, 10);
+  const pending = items.filter((item) => item.status === 'pending');
+  const dueToday = pending.filter((item) => item.dueAt?.slice(0, 10) === today);
+  const abnormal = items.filter((item) => item.abnormal);
+  return <div className="page followup-page"><div className="page-title"><div><span className="eyebrow"><ClipboardCheck size={15}/>诊后管理</span><h1>随访任务</h1><p>优先处理今日到期和异常反馈，任务详情沿用现有工作流。</p></div></div><div className="followup-summary"><div><span>待处理</span><strong>{pending.length}</strong></div><div><span>今日到期</span><strong>{dueToday.length}</strong></div><div><span>异常反馈</span><strong>{abnormal.length}</strong></div><div><span>已完成</span><strong>{items.filter((item) => item.status === 'completed').length}</strong></div></div><LiveDoctorFollowups/></div>;
+}
+
+function LiveDoctorFollowups({ focus = 'all' }) {
   const [items, setItems] = useState([]);
   const [queue, setQueue] = useState([]);
   const [show, setShow] = useState(false);
-  const [message, setMessage] = useState("");
-  const [form, setForm] = useState({
-    patientId: "",
-    title: "症状恢复随访",
-    type: "questionnaire",
-    dueAt: "",
-  });
-  const load = () =>
-    Promise.all([api.followups(), api.doctorWorkbench()]).then(([a, b]) => {
-      setItems(a.followups);
-      setQueue(b.queue);
-      if (!form.patientId && b.queue[0])
-        setForm((current) => ({
-          ...current,
-          patientId: b.queue[0].patient.id,
-        }));
-    });
-  useEffect(() => {
-    load().catch((error) => setMessage(error.message));
-  }, []);
+  const [selected, setSelected] = useState(null);
+  const [message, setMessage] = useState('');
+  const [form, setForm] = useState({ patientId: '', title: '症状恢复随访', type: 'questionnaire', dueAt: '' });
+  const typeLabels = { questionnaire: '随访问卷', medication: '用药提醒', rehabilitation: '康复训练', revisit: '复诊提醒' };
+
+  async function load() {
+    const [followupResult, workbench] = await Promise.all([api.followups(), api.doctorWorkbench()]);
+    setItems(followupResult.followups);
+    setQueue(workbench.queue);
+    if (!form.patientId && workbench.queue[0]) setForm((current) => ({ ...current, patientId: workbench.queue[0].patient.id }));
+  }
+
+  useEffect(() => { load().catch((error) => setMessage(error.message)); }, []);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const visibleItems = items.filter((item) => focus === 'all'
+    || (focus === 'pending' && item.status === 'pending')
+    || (focus === 'dueToday' && item.status === 'pending' && item.dueAt?.slice(0, 10) === today)
+    || (focus === 'abnormal' && item.abnormal)
+    || (focus === 'completed' && item.status === 'completed'));
+
   async function create() {
     try {
       await api.createFollowup(form);
@@ -3381,101 +3060,163 @@ function LiveDoctorFollowups() {
       setMessage(error.message);
     }
   }
-  return (
-    <div className="page">
-      <div className="page-title">
-        <div>
-          <span className="eyebrow">
-            <ClipboardCheck size={15} />
-            诊后管理
-          </span>
-          <h1>随访任务</h1>
-          <p>创建任务、查看患者反馈并优先处理异常结果。</p>
-        </div>
-        <button className="primary-button" onClick={() => setShow(!show)}>
-          <Plus size={17} />
-          新建随访
-        </button>
-      </div>
-      {message && <div className="inline-feedback success">{message}</div>}
-      {show && (
-        <div className="panel create-form">
-          <label>
-            患者
-            <select
-              value={form.patientId}
-              onChange={(e) => setForm({ ...form, patientId: e.target.value })}
-            >
-              {queue.map((item) => (
-                <option value={item.patient.id} key={item.patient.id}>
-                  {item.patient.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            任务标题
-            <input
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-            />
-          </label>
-          <label>
-            任务类型
-            <select
-              value={form.type}
-              onChange={(e) => setForm({ ...form, type: e.target.value })}
-            >
-              <option value="questionnaire">随访问卷</option>
-              <option value="medication">用药提醒</option>
-              <option value="rehabilitation">康复训练</option>
-              <option value="revisit">复诊提醒</option>
-            </select>
-          </label>
-          <label>
-            执行时间
-            <input
-              type="datetime-local"
-              value={form.dueAt}
-              onChange={(e) => setForm({ ...form, dueAt: e.target.value })}
-            />
-          </label>
-          <button className="dark-button" onClick={create}>
-            创建任务
-          </button>
-        </div>
-      )}
-      <div className="followup-grid">
-        {items.map((item, index) => (
-          <div
-            className={`followup-card ${item.abnormal ? "abnormal" : ""}`}
-            key={item.id}
-          >
-            <div className={`avatar ${index % 2 ? "blue" : "rose"}`}>
-              {item.patient.name.slice(0, 1)}
-            </div>
-            <div>
-              <span>
-                {new Date(item.dueAt).toLocaleString("zh-CN")} · {item.type}
-              </span>
-              <h3>
-                {item.patient.name} · {item.title}
-              </h3>
-              <p>{item.feedback?.text || "患者尚未提交反馈"}</p>
-            </div>
-            <em>
-              {item.abnormal
-                ? "异常关注"
-                : item.status === "completed"
-                  ? "已完成"
-                  : "待完成"}
-            </em>
-            <button className="outline-button">查看记录</button>
-          </div>
-        ))}
+
+  return <div className="page">
+    <div className="page-title">
+      <div><span className="eyebrow"><ClipboardCheck size={15}/>诊后管理</span><h1>随访任务</h1><p>创建任务、查看患者反馈并优先处理异常结果。</p></div>
+      <button type="button" className="primary-button" onClick={() => setShow((value) => !value)}><Plus size={17}/>新建随访</button>
+    </div>
+    {message && <div className="inline-feedback success">{message}</div>}
+    {show && <div className="panel create-form">
+      <label>患者<select value={form.patientId} onChange={(event) => setForm({ ...form, patientId: event.target.value })}>{queue.map((item) => <option value={item.patient.id} key={item.patient.id}>{item.patient.name}</option>)}</select></label>
+      <label>任务标题<input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })}/></label>
+      <label>任务类型<select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })}>{Object.entries(typeLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
+      <label>执行时间<input type="datetime-local" value={form.dueAt} onChange={(event) => setForm({ ...form, dueAt: event.target.value })}/></label>
+      <button type="button" className="dark-button" onClick={create}>创建随访</button>
+    </div>}
+    <div className="followup-grid" id="followup-task-list">
+      {visibleItems.map((item, index) => {
+        const patientName = item.patient?.name || '患者';
+        return <div className={`followup-card ${item.abnormal ? 'abnormal' : ''}`} key={item.id}>
+          <div className={`avatar ${riskAvatarClass(item.riskLevel)}`}>{patientName.slice(0, 1)}</div>
+          <div><span>{new Date(item.dueAt).toLocaleString('zh-CN')} · {typeLabels[item.type] || item.type}</span><h3>{patientName} · {item.title}</h3><p>{item.feedback?.text || '患者尚未提交反馈'}</p></div>
+          <em>{item.abnormal ? '异常关注' : item.status === 'completed' ? '已完成' : '待完成'}</em>
+          <button type="button" className="outline-button" onClick={() => setSelected(item)}>查看记录</button>
+        </div>;
+      })}
+      {visibleItems.length === 0 && <div className="empty-inline">当前分类暂无随访记录</div>}
+    </div>
+    {selected && <div className="modal-backdrop" onClick={() => setSelected(null)}>
+      <section className="knowledge-modal followup-record-modal" role="dialog" aria-modal="true" aria-labelledby="followup-record-title" onClick={(event) => event.stopPropagation()}>
+        <button type="button" className="modal-close" aria-label="关闭记录" onClick={() => setSelected(null)}><X size={19}/></button>
+        <span className="tag">{selected.abnormal ? '异常反馈' : selected.status === 'completed' ? '已完成' : '待处理'}</span>
+        <h2 id="followup-record-title">{selected.patient?.name || '患者'} · {selected.title}</h2>
+        <div className="followup-record-meta"><span>随访类型<strong>{typeLabels[selected.type] || selected.type}</strong></span><span>截止时间<strong>{new Date(selected.dueAt).toLocaleString('zh-CN')}</strong></span></div>
+        {selected.feedback ? <div className="followup-feedback"><div><span>症状严重程度</span><strong>{selected.feedback.severity}/10</strong></div><div><span>症状变化</span><p>{selected.feedback.text || '患者未填写文字描述'}</p></div><div><span>用药情况</span><p>{selected.feedback.medicationTaken ? '已按医嘱用药' : '未按医嘱用药'}</p></div><small>提交时间：{new Date(selected.feedback.submittedAt).toLocaleString('zh-CN')}</small></div> : <div className="empty-inline">患者尚未提交反馈，暂无随访记录。</div>}
+      </section>
+    </div>}
+  </div>;
+}
+
+function LiveDoctorFollowupsEncoded() {
+  const [items, setItems] = useState([]);
+  const [queue, setQueue] = useState([]);
+  const [show, setShow] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [message, setMessage] = useState('');
+  const [form, setForm] = useState({ patientId: '', title: '\u75c7\u72b6\u6062\u590d\u968f\u8bbf', type: 'questionnaire', dueAt: '' });
+  const typeLabels = { questionnaire: '\u968f\u8bbf\u95ee\u5377', medication: '\u7528\u836f\u63d0\u9192', rehabilitation: '\u5eb7\u590d\u8bad\u7ec3', revisit: '\u590d\u8bca\u63d0\u9192' };
+
+  const load = () => Promise.all([api.followups(), api.doctorWorkbench()]).then(([followupResult, workbench]) => {
+    setItems(followupResult.followups);
+    setQueue(workbench.queue);
+    if (!form.patientId && workbench.queue[0]) setForm((current) => ({ ...current, patientId: workbench.queue[0].patient.id }));
+  });
+
+  useEffect(() => { load().catch((error) => setMessage(error.message)); }, []);
+
+  async function create() {
+    try {
+      await api.createFollowup(form);
+      setShow(false);
+      setMessage('\u968f\u8bbf\u4efb\u52a1\u5df2\u521b\u5efa\uff0c\u60a3\u8005\u7aef\u53ef\u7acb\u5373\u67e5\u770b\u3002');
+      await load();
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  return <div className="page">
+    <div className="page-title"><div><span className="eyebrow"><ClipboardCheck size={15}/>诊后管理</span><h1>随访任务</h1><p>创建任务、查看患者反馈并优先处理异常结果。</p></div><button className="primary-button" onClick={() => setShow(!show)}><Plus size={17}/>新建随访</button></div>
+    {message && <div className="inline-feedback success">{message}</div>}
+    {show && <div className="panel create-form"><label>患者<select value={form.patientId} onChange={(event) => setForm({ ...form, patientId: event.target.value })}>{queue.map((item) => <option value={item.patient.id} key={item.patient.id}>{item.patient.name}</option>)}</select></label><label>任务标题<input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })}/></label><label>任务类型<select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })}>{Object.entries(typeLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label>执行时间<input type="datetime-local" value={form.dueAt} onChange={(event) => setForm({ ...form, dueAt: event.target.value })}/></label><button className="dark-button" onClick={create}>创建随访</button></div>}
+    <div className="followup-grid">{items.map((item, index) => <div className={`followup-card ${item.abnormal ? 'abnormal' : ''}`} key={item.id}><div className={`avatar ${index % 2 ? 'blue' : 'rose'}`}>{item.patient.name.slice(0, 1)}</div><div><span>{new Date(item.dueAt).toLocaleString('zh-CN')} · {typeLabels[item.type] || item.type}</span><h3>{item.patient.name} · {item.title}</h3><p>{item.feedback?.text || '\u60a3\u8005\u5c1a\u672a\u63d0\u4ea4\u53cd\u9988'}</p></div><em>{item.abnormal ? '\u5f02\u5e38\u5173\u6ce8' : item.status === 'completed' ? '\u5df2\u5b8c\u6210' : '\u5f85\u5b8c\u6210'}</em><button className="outline-button" onClick={() => setSelected(item)}>\u67e5\u770b\u8bb0\u5f55</button></div>)}</div>
+    {selected && <div className="modal-backdrop" onClick={() => setSelected(null)}><section className="knowledge-modal followup-record-modal" role="dialog" aria-modal="true" aria-labelledby="followup-record-title" onClick={(event) => event.stopPropagation()}><button className="modal-close" aria-label="\u5173\u95ed\u8bb0\u5f55" onClick={() => setSelected(null)}><X size={19}/></button><span className="tag">{selected.abnormal ? '\u5f02\u5e38\u53cd\u9988' : selected.status === 'completed' ? '\u5df2\u5b8c\u6210' : '\u5f85\u5904\u7406'}</span><h2 id="followup-record-title">{selected.patient?.name || '\u60a3\u8005'} · {selected.title}</h2><div className="followup-record-meta"><span>\u968f\u8bbf\u7c7b\u578b<strong>{typeLabels[selected.type] || selected.type}</strong></span><span>\u622a\u6b62\u65f6\u95f4<strong>{new Date(selected.dueAt).toLocaleString('zh-CN')}</strong></span></div>{selected.feedback ? <div className="followup-feedback"><div><span>\u75c7\u72b6\u4e25\u91cd\u7a0b\u5ea6</span><strong>{selected.feedback.severity}/10</strong></div><div><span>\u75c7\u72b6\u53d8\u5316</span><p>{selected.feedback.text || '\u60a3\u8005\u672a\u586b\u5199\u6587\u5b57\u63cf\u8ff0'}</p></div><div><span>\u7528\u836f\u60c5\u51b5</span><p>{selected.feedback.medicationTaken ? '\u5df2\u6309\u533b\u5631\u7528\u836f' : '\u672a\u6309\u533b\u5631\u7528\u836f'}</p></div><small>\u63d0\u4ea4\u65f6\u95f4：{new Date(selected.feedback.submittedAt).toLocaleString('zh-CN')}</small></div> : <div className="empty-inline">\u60a3\u8005\u5c1a\u672a\u63d0\u4ea4\u53cd\u9988\uff0c\u6682\u65e0\u968f\u8bbf\u8bb0\u5f55\u3002</div>}</section></div>}
+  </div>;
+}
+
+function LiveDoctorFollowupsLegacy() {
+  const [items,setItems]=useState([]);const [queue,setQueue]=useState([]);const [show,setShow]=useState(false);const [message,setMessage]=useState('');
+  const [form,setForm]=useState({patientId:'',title:'症状恢复随访',type:'questionnaire',dueAt:''});
+  const load=()=>Promise.all([api.followups(),api.doctorWorkbench()]).then(([a,b])=>{setItems(a.followups);setQueue(b.queue);if(!form.patientId&&b.queue[0])setForm((current)=>({...current,patientId:b.queue[0].patient.id}))});
+  useEffect(()=>{load().catch((error)=>setMessage(error.message));},[]);
+  async function create(){try{await api.createFollowup(form);setShow(false);setMessage('随访任务已创建，患者端可立即查看。');await load()}catch(error){setMessage(error.message)}}
+  return <div className="page"><div className="page-title"><div><span className="eyebrow"><ClipboardCheck size={15}/>诊后管理</span><h1>随访任务</h1><p>创建任务、查看患者反馈并优先处理异常结果。</p></div><button className="primary-button" onClick={()=>setShow(!show)}><Plus size={17}/>新建随访</button></div>{message&&<div className="inline-feedback success">{message}</div>}{show&&<div className="panel create-form"><label>患者<select value={form.patientId} onChange={(e)=>setForm({...form,patientId:e.target.value})}>{queue.map((item)=><option value={item.patient.id} key={item.patient.id}>{item.patient.name}</option>)}</select></label><label>任务标题<input value={form.title} onChange={(e)=>setForm({...form,title:e.target.value})}/></label><label>任务类型<select value={form.type} onChange={(e)=>setForm({...form,type:e.target.value})}><option value="questionnaire">随访问卷</option><option value="medication">用药提醒</option><option value="rehabilitation">康复训练</option><option value="revisit">复诊提醒</option></select></label><label>执行时间<input type="datetime-local" value={form.dueAt} onChange={(e)=>setForm({...form,dueAt:e.target.value})}/></label><button className="dark-button" onClick={create}>创建任务</button></div>}<div className="followup-grid">{items.map((item,index)=><div className={`followup-card ${item.abnormal?'abnormal':''}`} key={item.id}><div className={`avatar ${index%2?'blue':'rose'}`}>{item.patient.name.slice(0,1)}</div><div><span>{new Date(item.dueAt).toLocaleString('zh-CN')} · {item.type}</span><h3>{item.patient.name} · {item.title}</h3><p>{item.feedback?.text||'患者尚未提交反馈'}</p></div><em>{item.abnormal?'异常关注':item.status==='completed'?'已完成':'待完成'}</em><button className="outline-button">查看记录</button></div>)}</div></div>;
+}
+function LiveDoctorPatients({ onPatient, scope = 'all' }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  const [collapsed, setCollapsed] = useState({});
+  const [keyword, setKeyword] = useState('');
+  const [filter, setFilter] = useState(scope === 'high' ? 'high' : 'all');
+  useEffect(() => {
+    const request = scope === 'all' ? api.doctorPatients() : api.doctorWorkbench(); request.then((result) => { const patients = scope === 'all' ? result.patients : result.queue; setData({ patients, followupPatientIds: new Set(patients.filter((item) => item.latestFollowup?.status === 'pending').map((item) => item.patient.id)) }); setFilter(scope === 'high' ? 'high' : 'all'); }).catch((requestError) => setError(requestError.message));
+  }, [scope]);
+  if (!data) return error ? <EmptyState icon={AlertTriangle} title="无法读取患者列表" message={error}/> : <DataLoading label="正在按风险程度整理患者列表…"/>;
+  const filteredQueue = data.patients.filter((item) => {
+    const matchesKeyword = !keyword.trim() || `${item.patient.name} ${item.report?.chiefComplaint || ''}`.includes(keyword.trim());
+    const isFollowup = data.followupPatientIds.has(item.patient.id);
+    const isCompleted = item.booking.status === 'completed' || Boolean(item.latestDisposition);
+    const recentVisit = Date.now() - new Date(item.booking.appointmentAt).getTime() < 30 * 24 * 3600000;
+    return matchesKeyword && (filter === 'all' || (filter === 'high' && item.consultation?.riskLevel === 'high') || (filter === 'followup' && isFollowup) || (filter === 'recent' && recentVisit) || (filter === 'pending' && !isCompleted));
+  });
+  const riskGroups = [{ risk: 'high', label: '高风险' }, { risk: 'medium', label: '中风险' }, { risk: 'low', label: '低风险' }].map((group) => ({ ...group, patients: filteredQueue.filter((item) => item.consultation?.riskLevel === group.risk) }));
+  const visibleRiskGroups = filter === 'high' ? riskGroups.filter((group) => group.risk === 'high') : riskGroups;
+  const viewTitle = scope === 'today' ? '今日患者' : scope === 'high' ? '高风险患者' : '我的患者';
+  return <div className="page">
+    <div className="page-title">
+      <div>
+        <span className="eyebrow"><Users size={15}/>患者管理</span>
+        <h1>{viewTitle}</h1>
+        <p>医生长期负责的患者档案，包含已完成和当前就诊记录。</p>
       </div>
     </div>
-  );
+    <section className="panel patient-list-panel patients-only-panel">
+      <div className="section-heading">
+        <div>
+          <h2>患者列表</h2>
+        </div>
+        <div className="patient-list-controls"><div className="search-box"><Search size={16}/><input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="搜索姓名或患者编号"/></div><select value={filter} onChange={(event) => setFilter(event.target.value)} aria-label="患者筛选"><option value="all">全部</option><option value="high">高风险</option><option value="followup">随访中</option><option value="recent">最近就诊</option><option value="pending">待处理</option></select></div>
+      </div>
+      {visibleRiskGroups.map((group)=>
+        <div className="patient-risk-group" key={group.risk}>
+          <button className="risk-group-heading" onClick={() => setCollapsed((current) => ({ ...current, [group.risk]: !current[group.risk] }))} aria-expanded={!collapsed[group.risk]}>
+            <h3>{group.label}</h3>
+            <b>{group.patients.length}</b>
+            <ChevronDown className={collapsed[group.risk] ? 'collapsed' : ''} size={17}/>
+          </button>
+          {!collapsed[group.risk] && <div className="patient-table patient-only-table">
+            <div className="table-head patient-management-head">
+              <span>患者</span>
+              <span>风险</span>
+              <span>主要问题</span>
+              <span>最近预约</span>
+              <span>最近随访</span>
+              <span>状态</span>
+              <span>操作</span>
+            </div>
+            {group.patients.map((item, index)=>
+              <button className="table-row patient-management-row" key={item.booking.id} onClick={() => onPatient(item)}>
+                <span className="patient-cell">
+                  <i className={`avatar ${group.risk === 'high' ? 'rose' : group.risk === 'medium' ? 'amber' : 'green'}`}>{item.patient.name.slice(0, 1)}</i>
+                  <span>
+                    <strong>{item.patient.name}</strong>
+                    <small>{item.patient.gender} · {item.patient.age} 岁</small>
+                  </span>
+                </span>
+                <span><RiskBadge risk={riskLabel(item.consultation?.riskLevel)}/></span>
+                <span className="symptom-cell">{item.report?.chiefComplaint || '报告摘要待生成'}</span>
+                <span className="muted">{new Date(item.booking.appointmentAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                <span className="patient-status">{item.latestFollowup?.status === 'pending' ? '随访中' : '暂无'}</span>
+                <span className="patient-status">{(item.booking.status === 'completed' || item.latestDisposition) ? '已完成' : item.latestFollowup?.status === 'pending' ? '随访中' : '负责中'}</span>
+                <span className="patient-action">查看档案 <ChevronRight size={15}/></span>
+              </button>
+            )}
+          </div>}
+        </div>
+      )}
+    </section>
+  </div>;
 }
 
 function LiveDoctorSchedule({ user }) {
@@ -3530,19 +3271,15 @@ function LiveDoctorSchedule({ user }) {
   );
 }
 
-function LiveDoctorApp({ active, user }) {
-  const [selected, setSelected] = useState(null);
-  if (selected)
-    return (
-      <LiveDoctorPatient
-        queueItem={selected}
-        onBack={() => setSelected(null)}
-      />
-    );
-  if (active === "workspace" || active === "patients")
-    return <LiveDoctorWorkspace onPatient={setSelected} />;
-  if (active === "followups") return <LiveDoctorFollowups />;
-  return <LiveDoctorSchedule user={user} />;
+function LiveDoctorApp({ active, user, setActive }) {
+  const [selected,setSelected]=useState(null);
+  useEffect(() => { setSelected(null); }, [active]);
+  const openPatient = (queueItem) => setSelected({ queueItem, source: active });
+  if(selected)return <LiveDoctorPatient queueItem={selected.queueItem} backLabel={selected.source.startsWith('patients') ? '返回患者列表' : '返回接诊工作台'} onBack={()=>setSelected(null)}/>;
+    if(active==='workspace')return <LiveDoctorWorkspace onPatient={openPatient} onPatientsView={(filter)=>setActive(filter==='high'?'patients-high':'patients-today')} setActive={setActive}/>;
+  if(active==='patients' || active==='patients-today' || active==='patients-high')return <LiveDoctorPatients onPatient={openPatient} scope={active==='patients-high'?'high':active==='patients-today'?'today':'all'}/>;
+  if(active==='followups')return <LiveDoctorFollowupsOverview/>;
+  return <LiveDoctorSchedule user={user}/>;
 }
 
 function AdminDashboard({ setActive }) {
@@ -4925,9 +4662,8 @@ function App() {
       if (active === "education") return <LiveKnowledge />;
       return <LivePatientOverview setActive={setActive} user={session.user} />;
     }
-    if (role === "doctor")
-      return <LiveDoctorApp active={active} user={session.user} />;
-    return <LiveAdminApp active={active} setActive={setActive} />;
+    if (role === 'doctor') return <LiveDoctorApp active={active} user={session.user} setActive={setActive}/>;
+    return <LiveAdminApp active={active} setActive={setActive}/>;
   })();
   return (
     <Shell

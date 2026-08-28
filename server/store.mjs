@@ -74,6 +74,7 @@ export class SqliteStore {
       this.replaceAll(initial);
     }
     this.backfillRiskAssessments();
+    this.normalizeRiskLevels();
     this.ensureAuditChain();
     return this;
   }
@@ -222,6 +223,29 @@ export class SqliteStore {
       this.database.exec('ROLLBACK;');
       throw error;
     }
+  }
+
+  normalizeRiskLevels() {
+    const before = this.readSnapshot(['consultations', 'reports', 'riskAssessments']);
+    const after = clone(before);
+    let changed = false;
+    const normalize = (value) => value === 'emergency' ? 'high' : value;
+    for (const item of after.consultations) {
+      if (item.riskLevel === 'emergency') { item.riskLevel = 'high'; changed = true; }
+    }
+    for (const item of after.reports) {
+      if (item.riskLevel === 'emergency') { item.riskLevel = 'high'; changed = true; }
+    }
+    for (const item of after.riskAssessments) {
+      for (const field of ['ruleRiskLevel', 'modelRiskLevel', 'finalRiskLevel']) {
+        const normalized = normalize(item[field]);
+        if (normalized !== item[field]) { item[field] = normalized; changed = true; }
+      }
+    }
+    if (!changed) return;
+    this.database.exec('BEGIN IMMEDIATE;');
+    try { this.persistChanges(before, after, ['consultations', 'reports', 'riskAssessments']); this.database.exec('COMMIT;'); }
+    catch (error) { this.database.exec('ROLLBACK;'); throw error; }
   }
 
   backfillRiskAssessments() {

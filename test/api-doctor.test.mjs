@@ -17,7 +17,20 @@ test('GET /doctor/workbench returns only the assigned clinical queue', async () 
   assert.equal(result.response.status, 200);
   assert.ok(result.data.queue.length > 0);
   assert.ok(result.data.queue.every((item) => item.booking.doctorId === doctor.user.id));
+  assert.deepEqual(result.data.queue.map((item) => item.consultation.riskLevel), ['high', 'low']);
+  assert.ok(result.data.queue.every((item, index, queue) => index === 0 || item.consultation.riskLevel !== queue[index - 1].consultation.riskLevel || item.booking.createdAt >= queue[index - 1].booking.createdAt));
+  assert.deepEqual(result.data.riskGroups.map((group) => group.patients.length), [1, 0, 1]);
+  assert.equal(result.data.summary.total, result.data.queue.length);
   assert.equal(typeof result.data.summary.highRisk, 'number');
+});
+
+test('GET /doctor/patients returns only non-cancelled assigned patients', async () => {
+  const result = await context.request('/doctor/patients', { token: doctor.token });
+  assert.equal(result.response.status, 200);
+  assert.ok(result.data.patients.length > 0);
+  assert.ok(result.data.patients.every((item) => item.booking.doctorId === doctor.user.id));
+  assert.ok(result.data.patients.every((item) => item.booking.status !== 'cancelled'));
+  assert.ok(result.data.patients.every((item) => item.patient.role === 'patient'));
 });
 
 test('GET /doctor/patients/:id enforces assignment and records access audit', async () => {
@@ -49,6 +62,31 @@ test('POST /doctor/patients/:id/ai-analysis stores only structured model metadat
     const call = context.store.snapshot().modelCalls.find((item) => item.purpose === 'doctor_analysis');
     assert.ok(call);
     assert.equal('messages' in call, false);
+  } finally {
+    globalThis.fetch = nativeFetch;
+    if (originalApiKey === undefined) delete process.env.MEDCHAT_API_KEY;
+    else process.env.MEDCHAT_API_KEY = originalApiKey;
+  }
+});
+
+test('POST /doctor/patients/:id/ai-question answers a follow-up without storing chat content', async () => {
+  const nativeFetch = globalThis.fetch;
+  const originalApiKey = process.env.MEDCHAT_API_KEY;
+  process.env.MEDCHAT_API_KEY = 'integration-test-key';
+  globalThis.fetch = async (input, options) => {
+    if (String(input).startsWith('https://api.modagent-homing.com/')) {
+      return new Response(JSON.stringify({ choices: [{ message: { content: '需要补充神经系统查体，并结合影像学检查进一步判断。' } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return nativeFetch(input, options);
+  };
+  try {
+    const result = await context.request('/doctor/patients/usr_patient_lin/ai-question', { token: doctor.token, method: 'POST', body: { question: '下一步还需要检查什么？', analysis: { symptomHighlights: ['持续性眩晕'], followupQuestions: [], differentialDirections: ['需鉴别中枢性方向'], dangerSignals: ['无法独立行走'], suggestedExams: ['神经系统查体'], structuredSummary: '存在危险信号。' }, history: [] } });
+    assert.equal(result.response.status, 200);
+    assert.match(result.data.answer, /神经系统查体/);
+    const call = context.store.snapshot().modelCalls.find((item) => item.purpose === 'doctor_question');
+    assert.ok(call);
+    assert.equal('messages' in call, false);
+    assert.equal('question' in call, false);
   } finally {
     globalThis.fetch = nativeFetch;
     if (originalApiKey === undefined) delete process.env.MEDCHAT_API_KEY;
