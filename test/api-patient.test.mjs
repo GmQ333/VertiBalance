@@ -153,6 +153,7 @@ test('POST /uploads and GET /uploads persist private medical file metadata', asy
   const data = await response.json();
   assert.equal(response.status, 201);
   assert.equal('storedName' in data.upload, false);
+  assert.equal(data.upload.name, '检查报告.pdf');
   upload = data.upload;
   const list = await context.request('/uploads', { token: patient.token });
   assert.ok(list.data.uploads.some((item) => item.id === upload.id));
