@@ -21,7 +21,7 @@ export function verifyPassword(password, encoded = '') {
 
 export function createToken(user, secret = process.env.AUTH_SECRET || 'vertibalance-local-development-secret') {
   const header = base64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const payload = base64url(JSON.stringify({ sub: user.id, role: user.role, exp: Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS }));
+  const payload = base64url(JSON.stringify({ sub: user.id, role: user.role, cv: Number(user.credentialVersion || 0), exp: Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS }));
   const signature = crypto.createHmac('sha256', secret).update(`${header}.${payload}`).digest('base64url');
   return `${header}.${payload}.${signature}`;
 }

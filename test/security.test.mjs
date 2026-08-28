@@ -15,8 +15,9 @@ test('passwords use salted scrypt hashes and verify safely', () => {
 });
 
 test('signed session token rejects tampering', () => {
-  const token = createToken({ id: 'usr_test', role: 'patient' }, 'test-secret');
+  const token = createToken({ id: 'usr_test', role: 'patient', credentialVersion: 3 }, 'test-secret');
   assert.equal(verifyToken(token, 'test-secret').sub, 'usr_test');
+  assert.equal(verifyToken(token, 'test-secret').cv, 3);
   assert.equal(verifyToken(`${token.slice(0, -2)}xx`, 'test-secret'), null);
 });
 
