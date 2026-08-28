@@ -17,6 +17,8 @@ import {
   ClipboardCheck,
   Clock3,
   Database,
+  Eye,
+  EyeOff,
   FileClock,
   FileText,
   HeartPulse,
@@ -103,7 +105,7 @@ function RoleDisplay({ role }) {
   );
 }
 
-function ProfileMenu({ role, user, onLogout, onProfile }) {
+function ProfileMenu({ role, user, onLogout, onProfile, onSecurity }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
   const subtitle =
@@ -159,6 +161,13 @@ function ProfileMenu({ role, user, onLogout, onProfile }) {
               <ArrowRight size={14} />
             </button>
           )}
+          {role === "patient" && (
+            <button type="button" role="menuitem" onClick={onSecurity}>
+              <LockKeyhole size={16} />
+              <span>账号安全</span>
+              <ArrowRight size={14} />
+            </button>
+          )}
           <button type="button" role="menuitem" onClick={onLogout}>
             <CircleUserRound size={16} />
             <span>退出并切换账号</span>
@@ -194,6 +203,15 @@ function Shell({
     age: user.age || "",
   });
   const [profileMessage, setProfileMessage] = useState("");
+  const [securityOpen, setSecurityOpen] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [passwordVisible, setPasswordVisible] = useState({});
+  const [securityMessage, setSecurityMessage] = useState("");
+  const [securitySaving, setSecuritySaving] = useState(false);
   useEffect(() => {
     setProfileForm({
       name: user.name || "",
@@ -266,6 +284,33 @@ function Shell({
       setTimeout(() => setProfileOpen(false), 500);
     } catch (error) {
       setProfileMessage(error.message);
+    }
+  }
+  function openSecurity() {
+    setPasswordForm({
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    });
+    setPasswordVisible({});
+    setSecurityMessage("");
+    setSecurityOpen(true);
+  }
+  async function changePassword(event) {
+    event.preventDefault();
+    setSecurityMessage("");
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setSecurityMessage("两次输入的新密码不一致");
+      return;
+    }
+    setSecuritySaving(true);
+    try {
+      const result = await api.changePassword(passwordForm);
+      setSecurityMessage(result.message);
+      setTimeout(onLogout, 1200);
+    } catch (error) {
+      setSecurityMessage(error.message);
+      setSecuritySaving(false);
     }
   }
   const nav =
@@ -400,6 +445,7 @@ function Shell({
                 setProfileOpen(true);
                 setProfileMessage("");
               }}
+              onSecurity={openSecurity}
             />
           </div>
         </header>
@@ -540,6 +586,94 @@ function Shell({
             <button className="primary-button full" onClick={saveProfile}>
               保存资料
             </button>
+          </section>
+        </div>
+      )}
+      {securityOpen && (
+        <div className="modal-backdrop" onClick={() => setSecurityOpen(false)}>
+          <section
+            className="knowledge-modal feedback-modal security-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="security-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              className="modal-close"
+              aria-label="关闭账号安全"
+              onClick={() => setSecurityOpen(false)}
+            >
+              <X size={19} />
+            </button>
+            <span className="eyebrow">
+              <ShieldCheck size={15} />
+              安全中心
+            </span>
+            <h2 id="security-title">修改登录密码</h2>
+            <div className="security-status">
+              <LockKeyhole size={21} />
+              <div>
+                <strong>密码保护已开启</strong>
+                <span>修改后，所有已登录设备都需要使用新密码重新登录。</span>
+              </div>
+            </div>
+            <form className="security-form" onSubmit={changePassword}>
+              {[
+                ["currentPassword", "当前密码", "current-password"],
+                ["newPassword", "新密码", "new-password"],
+                ["confirmPassword", "确认新密码", "new-password"],
+              ].map(([field, label, autoComplete]) => (
+                <label key={field}>
+                  {label}
+                  <div className="password-field">
+                    <input
+                      type={passwordVisible[field] ? "text" : "password"}
+                      value={passwordForm[field]}
+                      autoComplete={autoComplete}
+                      required
+                      onChange={(event) =>
+                        setPasswordForm({
+                          ...passwordForm,
+                          [field]: event.target.value,
+                        })
+                      }
+                    />
+                    <button
+                      type="button"
+                      aria-label={passwordVisible[field] ? `隐藏${label}` : `显示${label}`}
+                      title={passwordVisible[field] ? "隐藏密码" : "显示密码"}
+                      onClick={() =>
+                        setPasswordVisible({
+                          ...passwordVisible,
+                          [field]: !passwordVisible[field],
+                        })
+                      }
+                    >
+                      {passwordVisible[field] ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </label>
+              ))}
+              <div className="password-rules" aria-live="polite">
+                <span className={passwordForm.newPassword.length >= 8 ? "met" : ""}>
+                  <Check size={14} />至少 8 位
+                </span>
+                <span className={/[A-Za-z]/.test(passwordForm.newPassword) ? "met" : ""}>
+                  <Check size={14} />包含字母
+                </span>
+                <span className={/\d/.test(passwordForm.newPassword) ? "met" : ""}>
+                  <Check size={14} />包含数字
+                </span>
+              </div>
+              {securityMessage && (
+                <div className={`inline-feedback ${securitySaving ? "success" : ""}`}>
+                  {securityMessage}
+                </div>
+              )}
+              <button className="primary-button full" disabled={securitySaving}>
+                {securitySaving ? "密码已更新，正在退出…" : "确认修改密码"}
+              </button>
+            </form>
           </section>
         </div>
       )}

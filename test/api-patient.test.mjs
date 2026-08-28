@@ -30,6 +30,19 @@ test('PATCH /auth/profile updates only the authenticated patient profile', async
   assert.ok(context.store.snapshot(['audits']).audits.some((item) => item.action === 'profile_updated' && item.objectId === patient.user.id));
 });
 
+test('PATCH /auth/password changes credentials and invalidates the old token', async () => {
+  const result = await context.request('/auth/password', { token: patient.token, method: 'PATCH', body: { currentPassword: 'Verti123!', newPassword: 'NewSecure123!', confirmPassword: 'NewSecure123!' } });
+  assert.equal(result.response.status, 200);
+  assert.equal(result.data.requiresRelogin, true);
+  const oldSession = await context.request('/auth/me', { token: patient.token });
+  assert.equal(oldSession.response.status, 401);
+  const login = await context.request('/auth/login', { method: 'POST', body: { account: 'patient@demo.com', password: 'NewSecure123!', role: 'patient' } });
+  assert.equal(login.response.status, 200);
+  patient.token = login.data.token;
+  const invalid = await context.request('/auth/password', { token: patient.token, method: 'PATCH', body: { currentPassword: 'wrong', newPassword: 'Another123!', confirmPassword: 'Another123!' } });
+  assert.equal(invalid.response.status, 400);
+});
+
 test('GET /patient/dashboard returns only the patient aggregate', async () => {
   const result = await context.request('/patient/dashboard', { token: patient.token });
   assert.equal(result.response.status, 200);

@@ -98,7 +98,7 @@ export function createApiRouter(store, options = {}) {
     const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : '';
     const payload = verifyToken(token);
     const user = payload ? store.snapshot(['users']).users.find((item) => item.id === payload.sub) : null;
-    if (!user || user.status !== 'active') throw httpError(401, 'UNAUTHORIZED', '登录状态已失效，请重新登录');
+    if (!user || user.status !== 'active' || Number(payload?.cv || 0) !== Number(user.credentialVersion || 0)) throw httpError(401, 'UNAUTHORIZED', '登录状态已失效，请重新登录');
     req.user = user; next();
   });
 
@@ -130,7 +130,7 @@ export function createApiRouter(store, options = {}) {
     if (!strongPassword(password)) throw httpError(400, 'WEAK_PASSWORD', '密码至少 8 位，且必须包含字母和数字');
     const user = await store.transaction(['users', 'audits'], (data) => {
       if (data.users.some((item) => item.account === account || item.phone === phone)) throw httpError(409, 'ACCOUNT_EXISTS', '该账号或手机号已存在');
-      const created = { id: createId('usr'), role: 'patient', name, account, phone, passwordHash: hashPassword(password), status: 'active', gender: req.body.gender || '未设置', age: Number(req.body.age) || null, createdAt: now(), lastLoginAt: now() };
+      const created = { id: createId('usr'), role: 'patient', name, account, phone, passwordHash: hashPassword(password), credentialVersion: 0, status: 'active', gender: req.body.gender || '未设置', age: Number(req.body.age) || null, createdAt: now(), lastLoginAt: now() };
       data.users.push(created);
       data.audits.push(auditEntry(created, 'patient_registered', 'user', created.id, '患者完成自助注册'));
       return created;
@@ -171,6 +171,24 @@ export function createApiRouter(store, options = {}) {
       return target;
     });
     res.json({ user: publicUser(updated) });
+  }));
+
+  router.patch('/auth/password', authenticate, asyncRoute(async (req, res) => {
+    const currentPassword = String(req.body?.currentPassword || '');
+    const newPassword = String(req.body?.newPassword || '');
+    const confirmPassword = String(req.body?.confirmPassword || '');
+    if (!verifyPassword(currentPassword, req.user.passwordHash)) throw httpError(400, 'CURRENT_PASSWORD_INVALID', '当前密码不正确');
+    if (!strongPassword(newPassword)) throw httpError(400, 'WEAK_PASSWORD', '新密码至少 8 位，且必须包含字母和数字');
+    if (newPassword !== confirmPassword) throw httpError(400, 'PASSWORD_MISMATCH', '两次输入的新密码不一致');
+    if (newPassword === currentPassword) throw httpError(400, 'PASSWORD_UNCHANGED', '新密码不能与当前密码相同');
+    await store.transaction(['users', 'audits'], (data) => {
+      const target = data.users.find((item) => item?.id === req.user.id);
+      if (!target) throw httpError(404, 'NOT_FOUND', '用户不存在');
+      target.passwordHash = hashPassword(newPassword);
+      target.credentialVersion = Number(target.credentialVersion || 0) + 1;
+      data.audits.push(auditEntry(target, 'password_changed', 'user', target.id, '用户修改登录密码'));
+    });
+    res.json({ requiresRelogin: true, message: '密码已更新，请使用新密码重新登录' });
   }));
 
   router.use(authenticate);
