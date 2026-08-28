@@ -1,0 +1,28 @@
+{
+  "name": "vertibalance-platform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env.local server.mjs",
+    "build": "vite build",
+    "start": "NODE_ENV=production node --env-file-if-exists=.env.local server.mjs",
+    "test": "node --test",
+    "db:backup": "node --env-file-if-exists=.env.local scripts/backup-database.mjs",
+    "db:restore": "node --env-file-if-exists=.env.local scripts/restore-database.mjs"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "lucide-react": "^0.468.0",
+    "multer": "^2.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.7"
+  }
+}

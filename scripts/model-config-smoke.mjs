@@ -1,0 +1,13 @@
+const base = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:4173/api/v1';
+const loginResponse = await fetch(`${base}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ account: 'admin@demo.com', password: 'Verti123!', role: 'admin' }) });
+const login = await loginResponse.json();
+if (!loginResponse.ok) throw new Error(login.message);
+const headers = { Authorization: `Bearer ${login.token}`, 'Content-Type': 'application/json' };
+const modelsResponse = await fetch(`${base}/admin/models`, { headers });
+const models = await modelsResponse.json();
+const target = models.configs.find((item) => item.status !== 'active');
+if (!target) throw new Error('No inactive model configuration available for activation test');
+const activateResponse = await fetch(`${base}/admin/models/${target.id}/activate`, { method: 'PATCH', headers, body: '{}' });
+const activated = await activateResponse.json();
+if (!activateResponse.ok) throw new Error(`${activated.error}: ${activated.message}`);
+console.log(JSON.stringify({ activated: activated.config.model, promptVersion: activated.config.promptVersion, status: activated.config.status, patientDataSent: false }, null, 2));

@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+*.log
+data/vertibalance.json
+data/vertibalance.json.tmp
+data/vertibalance.sqlite
+data/vertibalance.sqlite-shm
+data/vertibalance.sqlite-wal
+data/uploads/
+backups/
