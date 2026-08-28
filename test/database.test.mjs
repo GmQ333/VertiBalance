@@ -14,6 +14,9 @@ test('database migrations create all required relational tables', async () => {
     for (const table of ['users', 'consultations', 'messages', 'reports', 'risk_assessments', 'bookings', 'followups', 'support_requests', 'uploads', 'model_calls', 'audits', 'schema_migrations']) assert.ok(tables.includes(table), `missing table ${table}`);
     assert.equal(store.database.prepare('SELECT COUNT(*) count FROM schema_migrations').get().count, 4);
     assert.equal(store.database.prepare('PRAGMA foreign_keys').get().foreign_keys, 1);
+    assert.equal(store.snapshot(['consultations']).consultations.find((item) => item.id === 'con_lin_001').riskLevel, 'emergency');
+    assert.equal(store.snapshot(['reports']).reports.find((item) => item.id === 'rpt_lin_001').riskLevel, 'emergency');
+    assert.equal(store.snapshot(['riskAssessments']).riskAssessments.find((item) => item.id === 'rsk_lin_001').finalRiskLevel, 'emergency');
     const databaseStat = await fs.stat(path.join(directory, 'database.sqlite'));
     const directoryStat = await fs.stat(directory);
     if (process.platform === 'win32') {
@@ -23,6 +26,31 @@ test('database migrations create all required relational tables', async () => {
       assert.equal(databaseStat.mode & 0o777, 0o600);
       assert.equal(directoryStat.mode & 0o777, 0o700);
     }
+  } finally {
+    store.close();
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('startup restores previously downgraded emergency risk records', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'vertibalance-risk-restore-'));
+  const databasePath = path.join(directory, 'database.sqlite');
+  let store = await new SqliteStore(databasePath).init();
+  try {
+    await store.transaction(['consultations', 'reports', 'riskAssessments'], (data) => {
+      data.consultations.find((item) => item.id === 'con_lin_001').riskLevel = 'high';
+      data.reports.find((item) => item.id === 'rpt_lin_001').riskLevel = 'high';
+      const assessment = data.riskAssessments.find((item) => item.id === 'rsk_lin_001');
+      assessment.ruleRiskLevel = 'high';
+      assessment.finalRiskLevel = 'high';
+    });
+    store.close();
+    store = await new SqliteStore(databasePath).init();
+    assert.equal(store.snapshot(['consultations']).consultations.find((item) => item.id === 'con_lin_001').riskLevel, 'emergency');
+    assert.equal(store.snapshot(['reports']).reports.find((item) => item.id === 'rpt_lin_001').riskLevel, 'emergency');
+    const restored = store.snapshot(['riskAssessments']).riskAssessments.find((item) => item.id === 'rsk_lin_001');
+    assert.equal(restored.ruleRiskLevel, 'emergency');
+    assert.equal(restored.finalRiskLevel, 'emergency');
   } finally {
     store.close();
     await fs.rm(directory, { recursive: true, force: true });

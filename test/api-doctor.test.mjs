@@ -17,11 +17,13 @@ test('GET /doctor/workbench returns only the assigned clinical queue', async () 
   assert.equal(result.response.status, 200);
   assert.ok(result.data.queue.length > 0);
   assert.ok(result.data.queue.every((item) => item.booking.doctorId === doctor.user.id));
-  assert.deepEqual(result.data.queue.map((item) => item.consultation.riskLevel), ['high', 'low']);
-  assert.ok(result.data.queue.every((item, index, queue) => index === 0 || item.consultation.riskLevel !== queue[index - 1].consultation.riskLevel || item.booking.createdAt >= queue[index - 1].booking.createdAt));
-  assert.deepEqual(result.data.riskGroups.map((group) => group.patients.length), [1, 0, 1]);
+  assert.deepEqual(result.data.queue.map((item) => item.consultation.riskLevel), ['emergency', 'low']);
+  assert.deepEqual(result.data.riskGroups.map((group) => group.risk), ['emergency', 'high', 'medium', 'low']);
+  assert.deepEqual(result.data.riskGroups.map((group) => group.patients.length), [1, 0, 0, 1]);
   assert.equal(result.data.summary.total, result.data.queue.length);
-  assert.equal(typeof result.data.summary.highRisk, 'number');
+  assert.equal(result.data.summary.emergency, 1);
+  assert.equal(result.data.summary.highRisk, 0);
+  assert.equal(result.data.summary.priorityRisk, result.data.summary.emergency + result.data.summary.highRisk);
 });
 
 test('GET /doctor/patients returns only non-cancelled assigned patients', async () => {
@@ -39,6 +41,9 @@ test('GET /doctor/patients/:id enforces assignment and records access audit', as
   assert.equal(assigned.data.patient.id, 'usr_patient_lin');
   assert.ok(Array.isArray(assigned.data.messages));
   assert.ok(Array.isArray(assigned.data.riskAssessments));
+  assert.equal(assigned.data.consultations[0].riskLevel, 'emergency');
+  assert.equal(assigned.data.reports[0].riskLevel, 'emergency');
+  assert.equal(assigned.data.riskAssessments[0].finalRiskLevel, 'emergency');
   const unassigned = await context.request('/doctor/patients/usr_patient_demo', { token: doctor.token });
   assert.equal(unassigned.response.status, 403);
   assert.ok(context.store.snapshot().audits.some((item) => item.action === 'patient_record_accessed' && item.objectId === 'usr_patient_lin'));
@@ -120,6 +125,7 @@ test('GET /consultations, /reports, /bookings and /followups apply doctor scope'
   assert.ok(reports.data.reports.length > 0);
   assert.ok(bookings.data.bookings.every((item) => item.doctorId === doctor.user.id));
   assert.ok(followups.data.followups.every((item) => item.doctorId === doctor.user.id));
+  assert.equal(followups.data.followups.find((item) => item.patientId === 'usr_patient_lin').riskLevel, 'emergency');
 });
 
 test('POST /doctor/dispositions writes clinical opinion separately and completes booking', async () => {

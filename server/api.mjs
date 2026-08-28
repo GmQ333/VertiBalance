@@ -6,7 +6,7 @@ import { buildReport, callDoctorAnalysis, callDoctorQuestion, callPatientReport,
 import { createId, createToken, hashPassword, publicUser, verifyPassword, verifyToken } from './security.mjs';
 
 const riskWeight = { low: 1, medium: 2, high: 3, emergency: 4 };
-const riskLabels = { high: '高风险', medium: '中风险', low: '低风险' };
+const riskLabels = { emergency: '紧急', high: '高风险', medium: '中风险', low: '低风险' };
 const careByRisk = {
   low: { careTimeframe: '按需就医并留意变化', immediateCare: false },
   medium: { careTimeframe: '一周内就医', immediateCare: false },
@@ -472,7 +472,7 @@ export function createApiRouter(store, options = {}) {
     const data = store.snapshot(['followups', 'users', 'consultations']); let followups = data.followups;
     if (req.user.role === 'patient') followups = followups.filter((item) => item.patientId === req.user.id);
     if (req.user.role === 'doctor') followups = followups.filter((item) => item.doctorId === req.user.id);
-    res.json({ followups: followups.sort((a, b) => a.dueAt.localeCompare(b.dueAt)).map((item) => { const consultation = data.consultations.filter((entry) => entry.patientId === item.patientId).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]; return { ...item, riskLevel: consultation?.riskLevel === 'emergency' ? 'high' : consultation?.riskLevel || 'low', patient: publicUser(data.users.find((user) => user.id === item.patientId)), doctor: publicUser(data.users.find((user) => user.id === item.doctorId)) }; }) });
+    res.json({ followups: followups.sort((a, b) => a.dueAt.localeCompare(b.dueAt)).map((item) => { const consultation = data.consultations.filter((entry) => entry.patientId === item.patientId).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]; return { ...item, riskLevel: consultation?.riskLevel || 'low', patient: publicUser(data.users.find((user) => user.id === item.patientId)), doctor: publicUser(data.users.find((user) => user.id === item.doctorId)) }; }) });
   });
 
   router.post('/followups/:id/feedback', requireRole('patient'), asyncRoute(async (req, res) => {
@@ -574,7 +574,9 @@ export function createApiRouter(store, options = {}) {
     }).sort((a, b) => riskWeight[b.consultation?.riskLevel] - riskWeight[a.consultation?.riskLevel] || a.booking.createdAt.localeCompare(b.booking.createdAt));
     const riskGroups = Object.entries(riskLabels).map(([risk, label]) => ({ risk, label, patients: queue.filter((item) => item.consultation?.riskLevel === risk) }));
     const followups = data.followups.filter((item) => item.doctorId === req.user.id && item.status === 'pending');
-    res.json({ queue, riskGroups, summary: { total: queue.length, pending: queue.filter((item) => item.booking.status === 'confirmed').length, highRisk: queue.filter((item) => item.consultation?.riskLevel === 'high').length, followups: followups.length, abnormalFollowups: followups.filter((item) => item.abnormal).length } });
+    const emergency = queue.filter((item) => item.consultation?.riskLevel === 'emergency').length;
+    const highRisk = queue.filter((item) => item.consultation?.riskLevel === 'high').length;
+    res.json({ queue, riskGroups, summary: { total: queue.length, pending: queue.filter((item) => item.booking.status === 'confirmed').length, emergency, highRisk, priorityRisk: emergency + highRisk, followups: followups.length, abnormalFollowups: followups.filter((item) => item.abnormal).length } });
   }));
 
   router.get('/doctor/patients', requireRole('doctor'), asyncRoute(async (req, res) => {

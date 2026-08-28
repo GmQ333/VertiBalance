@@ -22,7 +22,7 @@ export function createSeedData() {
       { id: 'dept_vertigo', name: '眩晕专病门诊', campus: '中心院区', enabled: true },
     ],
     consultations: [
-      { id: 'con_lin_001', patientId: 'usr_patient_lin', status: 'transferred', riskLevel: 'high', dangerSignals: ['无法独立行走'], createdAt: iso(-2), endedAt: iso(-1.4), assignedDoctorId: 'usr_doctor_demo' },
+      { id: 'con_lin_001', patientId: 'usr_patient_lin', status: 'transferred', riskLevel: 'emergency', dangerSignals: ['无法独立行走'], createdAt: iso(-2), endedAt: iso(-1.4), assignedDoctorId: 'usr_doctor_demo' },
       { id: 'con_zhou_001', patientId: 'usr_patient_zhou', status: 'transferred', riskLevel: 'medium', dangerSignals: [], createdAt: iso(-26), endedAt: iso(-25.5), assignedDoctorId: 'usr_doctor_demo' },
       { id: 'con_zhao_001', patientId: 'usr_patient_zhao', status: 'transferred', riskLevel: 'low', dangerSignals: [], createdAt: iso(-18), endedAt: iso(-17.5), assignedDoctorId: 'usr_doctor_demo' },
     ],
@@ -34,12 +34,12 @@ export function createSeedData() {
       { id: 'msg_5', consultationId: 'con_zhao_001', role: 'user', content: '前庭性偏头痛复诊后症状稳定，偶尔有轻微头昏。', createdAt: iso(-18) },
     ],
     reports: [
-      { id: 'rpt_lin_001', consultationId: 'con_lin_001', patientId: 'usr_patient_lin', chiefComplaint: '突发持续性旋转感伴行走不稳', episodeFeatures: '突然发作，持续约 40 分钟', triggers: '无明确体位诱因', accompanyingSymptoms: '恶心、明显行走不稳', dangerSignals: ['无法独立行走'], history: '高血压 8 年', medications: '降压药，具体药名待补充', aiRiskNote: '存在中枢性眩晕相关危险信号，建议立即急诊评估。', recommendedDepartment: '神经内科/急诊', riskLevel: 'high', createdAt: iso(-1.4) },
+      { id: 'rpt_lin_001', consultationId: 'con_lin_001', patientId: 'usr_patient_lin', chiefComplaint: '突发持续性旋转感伴行走不稳', episodeFeatures: '突然发作，持续约 40 分钟', triggers: '无明确体位诱因', accompanyingSymptoms: '恶心、明显行走不稳', dangerSignals: ['无法独立行走'], history: '高血压 8 年', medications: '降压药，具体药名待补充', aiRiskNote: '存在中枢性眩晕相关危险信号，建议立即急诊评估。', recommendedDepartment: '神经内科/急诊', riskLevel: 'emergency', createdAt: iso(-1.4) },
       { id: 'rpt_zhou_001', consultationId: 'con_zhou_001', patientId: 'usr_patient_zhou', chiefComplaint: '体位变化诱发短暂旋转感', episodeFeatures: '反复发作，每次约 20 秒', triggers: '晨起、翻身', accompanyingSymptoms: '轻微恶心', dangerSignals: [], history: '未采集', medications: '未采集', aiRiskNote: '症状可能与位置性眩晕方向相关，建议专科进一步检查。', recommendedDepartment: '耳鼻喉科/眩晕门诊', riskLevel: 'medium', createdAt: iso(-25.5) },
       { id: 'rpt_zhao_001', consultationId: 'con_zhao_001', patientId: 'usr_patient_zhao', chiefComplaint: '复诊后症状稳定，偶有轻微头昏', episodeFeatures: '偶发，每次数分钟', triggers: '熬夜后明显', accompanyingSymptoms: '无明显恶心', dangerSignals: [], history: '前庭性偏头痛', medications: '按医嘱用药', aiRiskNote: '当前未发现危险信号，建议继续观察并按计划复诊。', recommendedDepartment: '眩晕专病门诊', riskLevel: 'low', createdAt: iso(-17.5) },
     ],
     riskAssessments: [
-      { id: 'rsk_lin_001', consultationId: 'con_lin_001', ruleRiskLevel: 'high', modelRiskLevel: null, finalRiskLevel: 'high', recommendedDepartment: '神经内科/急诊', careTimeframe: '立即急诊', immediateCare: true, possibleDirections: ['可能涉及中枢性眩晕方向'], dangerSignals: ['无法独立行走'], createdAt: iso(-1.9) },
+      { id: 'rsk_lin_001', consultationId: 'con_lin_001', ruleRiskLevel: 'emergency', modelRiskLevel: null, finalRiskLevel: 'emergency', recommendedDepartment: '神经内科/急诊', careTimeframe: '立即急诊', immediateCare: true, possibleDirections: ['可能涉及中枢性眩晕方向'], dangerSignals: ['无法独立行走'], createdAt: iso(-1.9) },
       { id: 'rsk_zhou_001', consultationId: 'con_zhou_001', ruleRiskLevel: 'medium', modelRiskLevel: null, finalRiskLevel: 'medium', recommendedDepartment: '耳鼻喉科/眩晕门诊', careTimeframe: '一周内', immediateCare: false, possibleDirections: ['可能涉及外周前庭性眩晕方向'], dangerSignals: [], createdAt: iso(-25.9) },
       { id: 'rsk_zhao_001', consultationId: 'con_zhao_001', ruleRiskLevel: 'low', modelRiskLevel: null, finalRiskLevel: 'low', recommendedDepartment: '眩晕专病门诊', careTimeframe: '按计划复诊', immediateCare: false, possibleDirections: ['前庭性偏头痛恢复期'], dangerSignals: [], createdAt: iso(-17.9) },
     ],

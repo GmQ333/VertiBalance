@@ -36,6 +36,7 @@ import {
   Send,
   Settings,
   ShieldCheck,
+  Siren,
   Sparkles,
   Stethoscope,
   TableProperties,
@@ -2756,8 +2757,8 @@ function DoctorApp({ active }) {
   );
 }
 
-const riskLabel = (risk) => risk === 'high' ? '高' : risk === 'low' ? '低' : '中';
-const riskAvatarClass = (risk) => risk === 'high' ? 'rose' : risk === 'medium' ? 'amber' : 'green';
+const riskLabel = (risk) => ({ emergency: '紧急', high: '高', medium: '中', low: '低' })[risk] || '未知';
+const riskAvatarClass = (risk) => ({ emergency: 'emergency', high: 'rose', medium: 'amber', low: 'green' })[risk] || 'blue';
 
 function LiveDoctorWorkspace({ onPatient, onPatientsView, setActive }) {
   const [data, setData] = useState(null);
@@ -2804,14 +2805,14 @@ function LiveDoctorWorkspace({ onPatient, onPatientsView, setActive }) {
   if (!currentPatient) return <EmptyState icon={Users} title="暂无今日接诊患者" message="当前工作台还没有可展示的患者。"/>;
 
   const report = currentPatient.report || {};
-  const highRiskPatients = consultPatientList.filter((patient) => patient.riskLevel === 'high');
-  const priorityPatient = highRiskPatients[0] || currentPatient;
+  const priorityPatients = consultPatientList.filter((patient) => ['emergency', 'high'].includes(patient.riskLevel));
+  const priorityPatient = priorityPatients[0] || currentPatient;
   const transferPatients = [currentPatient, ...consultPatientList.filter((patient) => patient.id !== currentPatient.id)].slice(0, 3);
   const formatTime = (value) => new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
 
   return <div className="page">
-    <div className="page-title"><div><span className="eyebrow"><Stethoscope size={15}/>临床工作台</span><h1>今日接诊工作台</h1><p>共 {data.summary.total} 位我的患者，{data.summary.highRisk} 位需要优先关注。</p></div><div className="date-control"><CalendarDays size={17}/>{new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}</div></div>
-    <section className="work-overview"><div className="subsection-heading"><div><span>今日工作概览</span><small>先处理风险和待办，再进入患者档案</small></div></div><div className="stats-grid doctor-stats"><StatCard icon={Users} tone="blue" label="我的患者" value={data.summary.total} detail={`${data.summary.pending} 位待接诊`} onClick={() => onPatientsView('today')}/><StatCard icon={AlertTriangle} tone="rose" label="高风险患者" value={data.summary.highRisk} detail="规则优先排序" onClick={() => onPatientsView('high')}/><StatCard icon={ClipboardCheck} tone="violet" label="待办随访" value={data.summary.followups} detail={`${data.summary.abnormalFollowups} 项异常关注`} onClick={() => setActive('followups')}/><StatCard icon={ShieldCheck} tone="green" label="资料访问" value="已审计" detail="查看行为自动留痕"/></div></section>
+    <div className="page-title"><div><span className="eyebrow"><Stethoscope size={15}/>临床工作台</span><h1>今日接诊工作台</h1><p>共 {data.summary.total} 位我的患者，{data.summary.priorityRisk} 位需要优先关注。</p></div><div className="date-control"><CalendarDays size={17}/>{new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}</div></div>
+    <section className="work-overview"><div className="subsection-heading"><div><span>今日工作概览</span><small>先处理风险和待办，再进入患者档案</small></div></div><div className="stats-grid doctor-stats"><StatCard icon={Users} tone="blue" label="我的患者" value={data.summary.total} detail={`${data.summary.pending} 位待接诊`} onClick={() => onPatientsView('today')}/><StatCard icon={Siren} tone="rose" label="紧急患者" value={data.summary.emergency} detail="需要立即处置" onClick={() => onPatientsView('emergency')}/><StatCard icon={AlertTriangle} tone="amber" label="高风险患者" value={data.summary.highRisk} detail="建议 24 小时内就医" onClick={() => onPatientsView('high')}/><StatCard icon={ClipboardCheck} tone="violet" label="待办随访" value={data.summary.followups} detail={`${data.summary.abnormalFollowups} 项异常关注`} onClick={() => setActive('followups')}/><StatCard icon={ShieldCheck} tone="green" label="资料访问" value="已审计" detail="查看行为自动留痕"/></div></section>
     <div className="doctor-layout workbench-three-column">
       <section className="panel patient-list-panel today-queue">
         <div className="section-heading"><div><h2>今日接诊患者</h2><p>点击患者查看右侧预诊详情</p></div></div>
@@ -2827,7 +2828,7 @@ function LiveDoctorWorkspace({ onPatient, onPatientsView, setActive }) {
       </section>
 
       <aside className="doctor-aside">
-        <div className="panel priority-card"><div className="priority-head"><span><Zap size={18}/>优先关注</span><em>{highRiskPatients.length} 位</em></div><p className="panel-caption">今日接诊队列中的高风险患者</p><div className="priority-list">{highRiskPatients.length ? highRiskPatients.map((patient) => <button type="button" className={`priority-patient priority-patient-button ${patient.id === currentPatient.id ? 'selected' : ''}`} key={patient.id} onClick={() => setSelectedPatientId(patient.id)}><div className={`avatar ${riskAvatarClass(patient.riskLevel)}`}>{patient.name.slice(0, 1)}</div><div><strong>{patient.name} · {patient.age} 岁</strong><span>{patient.redFlags.description}</span></div><time>{formatTime(patient.transferStatus.time)}</time></button>) : <div className="empty-inline">今日暂无高风险患者</div>}</div><div className="risk-reason"><AlertTriangle size={18}/><p><strong>{priorityPatient.redFlags.labels.length ? '发现危险信号' : '当前风险提示'}</strong><span>{priorityPatient.redFlags.warning}</span></p></div><button type="button" className="dark-button" onClick={() => onPatient(priorityPatient.source)}>立即查看资料<ArrowRight size={16}/></button></div>
+        <div className="panel priority-card"><div className="priority-head"><span><Zap size={18}/>优先关注</span><em>{priorityPatients.length} 位</em></div><p className="panel-caption">今日接诊队列中的紧急与高风险患者</p><div className="priority-list">{priorityPatients.length ? priorityPatients.map((patient) => <button type="button" className={`priority-patient priority-patient-button ${patient.id === currentPatient.id ? 'selected' : ''}`} key={patient.id} onClick={() => setSelectedPatientId(patient.id)}><div className={`avatar ${riskAvatarClass(patient.riskLevel)}`}>{patient.name.slice(0, 1)}</div><div><strong>{patient.name} · {patient.age} 岁</strong><span>{patient.redFlags.description}</span></div><time>{formatTime(patient.transferStatus.time)}</time></button>) : <div className="empty-inline">今日暂无紧急或高风险患者</div>}</div><div className="risk-reason"><AlertTriangle size={18}/><p><strong>{priorityPatient.redFlags.labels.length ? '发现危险信号' : '当前风险提示'}</strong><span>{priorityPatient.redFlags.warning}</span></p></div><button type="button" className="dark-button" onClick={() => onPatient(priorityPatient.source)}>立即查看资料<ArrowRight size={16}/></button></div>
         <div className="panel schedule-card secondary-panel"><div className="section-heading"><div><h2>资料移交状态</h2><p>当前选中患者及相关资料状态</p></div></div>{transferPatients.map((patient) => <div className="schedule-row" key={patient.id}><strong>{formatTime(patient.transferStatus.time)}</strong><i/><div><span>{patient.transferStatus.name}</span><small>{patient.transferStatus.department} · {patient.transferStatus.reportStatus}</small></div><em>{patient.transferStatus.accessStatus}</em></div>)}</div>
       </aside>
     </div>
@@ -2871,8 +2872,8 @@ function LiveDoctorWorkspaceSelection({ onPatient, onPatientsView, setActive }) 
   if (!data) return error ? <EmptyState icon={AlertTriangle} title="无法读取接诊队列" message={error}/> : <DataLoading label="正在按风险等级整理患者队列…"/>;
   if (!currentPatient) return <EmptyState icon={Users} title="暂无今日接诊患者" message="当前工作台还没有可展示的患者。"/>;
   const transferPatients = [currentPatient, ...consultPatientList.filter((patient) => patient.id !== currentPatient.id)].slice(0, 3);
-  return <div className="page"><div className="page-title"><div><span className="eyebrow"><Stethoscope size={15}/>临床工作台</span><h1>今日接诊工作台</h1><p>共 {data.summary.total} 位我的患者，{data.summary.highRisk} 位需要优先关注。</p></div><div className="date-control"><CalendarDays size={17}/>{new Date().toLocaleDateString('zh-CN',{year:'numeric',month:'long',day:'numeric'})}</div></div>
-    <section className="work-overview"><div className="subsection-heading"><div><span>今日工作概览</span><small>先处理风险和待办，再进入患者档案</small></div></div><div className="stats-grid doctor-stats"><StatCard icon={Users} tone="blue" label="我的患者" value={data.summary.total} detail={`${data.summary.pending} 位待接诊`} onClick={() => onPatientsView('today')}/><StatCard icon={AlertTriangle} tone="rose" label="高风险患者" value={data.summary.highRisk} detail="规则优先排序" onClick={() => onPatientsView('high')}/><StatCard icon={ClipboardCheck} tone="violet" label="待办随访" value={data.summary.followups} detail={`${data.summary.abnormalFollowups} 项异常关注`} onClick={() => setActive('followups')}/><StatCard icon={ShieldCheck} tone="green" label="资料访问" value="已审计" detail="查看行为自动留痕"/></div></section>
+  return <div className="page"><div className="page-title"><div><span className="eyebrow"><Stethoscope size={15}/>临床工作台</span><h1>今日接诊工作台</h1><p>共 {data.summary.total} 位我的患者，{data.summary.priorityRisk} 位需要优先关注。</p></div><div className="date-control"><CalendarDays size={17}/>{new Date().toLocaleDateString('zh-CN',{year:'numeric',month:'long',day:'numeric'})}</div></div>
+    <section className="work-overview"><div className="subsection-heading"><div><span>今日工作概览</span><small>先处理风险和待办，再进入患者档案</small></div></div><div className="stats-grid doctor-stats"><StatCard icon={Users} tone="blue" label="我的患者" value={data.summary.total} detail={`${data.summary.pending} 位待接诊`} onClick={() => onPatientsView('today')}/><StatCard icon={Siren} tone="rose" label="优先患者" value={data.summary.priorityRisk} detail={`${data.summary.emergency} 位紧急 · ${data.summary.highRisk} 位高风险`} onClick={() => onPatientsView('emergency')}/><StatCard icon={ClipboardCheck} tone="violet" label="待办随访" value={data.summary.followups} detail={`${data.summary.abnormalFollowups} 项异常关注`} onClick={() => setActive('followups')}/><StatCard icon={ShieldCheck} tone="green" label="资料访问" value="已审计" detail="查看行为自动留痕"/></div></section>
     <div className="doctor-layout"><section className="panel patient-list-panel today-queue"><div className="section-heading"><div><h2>今日接诊队列</h2><p>今天需要处理的患者，按风险程度和预约时间排序</p></div></div><div className="patient-table"><div className="table-head"><span>患者</span><span>风险</span><span>症状摘要</span><span>预约时间</span><span>状态</span></div>{data.queue.map((item) => <button type="button" className={`table-row ${item.patient.id === currentPatient.id ? 'selected' : ''}`} key={item.booking.id} onClick={() => setSelectedPatientId(item.patient.id)}><span className="patient-cell"><i className={`avatar ${riskAvatarClass(item.consultation?.riskLevel)}`}>{item.patient.name.slice(0,1)}</i><span><strong>{item.patient.name}</strong><small>{item.patient.gender} · {item.patient.age} 岁</small></span></span><span><RiskBadge risk={riskLabel(item.consultation?.riskLevel)}/></span><span className="symptom-cell">{item.report?.chiefComplaint || '报告摘要待生成'}</span><span className="muted">{new Date(item.booking.appointmentAt).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span><span className="patient-status">{item.booking.status === 'completed' ? '已完成' : '待接诊'}</span></button>)}</div></section><aside className="doctor-aside"><div className="panel priority-card"><div className="priority-head"><span><Zap size={18}/>优先关注</span><em>{riskLabel(currentPatient.riskLevel)}风险</em></div><div className="priority-patient"><div className={`avatar ${riskAvatarClass(currentPatient.riskLevel)}`}>{currentPatient.name.slice(0,1)}</div><div><strong>{currentPatient.name} · {currentPatient.age} 岁</strong><span>{currentPatient.redFlags.description}</span></div></div><div className="risk-reason"><AlertTriangle size={18}/><p><strong>{currentPatient.redFlags.labels.length ? '发现危险信号' : '当前风险提示'}</strong><span>{currentPatient.redFlags.warning}</span></p></div><button type="button" className="dark-button" onClick={() => onPatient(currentPatient.source)}>立即查看资料<ArrowRight size={16}/></button></div><div className="panel schedule-card secondary-panel"><div className="section-heading"><div><h2>资料移交状态</h2><p>当前选中患者及相关资料状态</p></div></div>{transferPatients.map((patient) => <div className="schedule-row" key={patient.id}><strong>{new Date(patient.transferStatus.time).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}</strong><i/><div><span>{patient.transferStatus.name}</span><small>{patient.transferStatus.department} · {patient.transferStatus.reportStatus}</small></div><em>{patient.transferStatus.accessStatus}</em></div>)}</div></aside></div>
   </div>;
 }
@@ -2881,10 +2882,10 @@ function LiveDoctorWorkspaceLegacy({ onPatient, onPatientsView, setActive }) {
   const [data, setData] = useState(null); const [error, setError] = useState('');
   useEffect(() => { api.doctorWorkbench().then(setData).catch((requestError) => setError(requestError.message)); }, []);
   if (!data) return error ? <EmptyState icon={AlertTriangle} title="无法读取接诊队列" message={error}/> : <DataLoading label="正在按风险等级整理患者队列…"/>;
-  const priority = data.queue.find((item) => item.consultation?.riskLevel === 'high');
+  const priority = data.queue.find((item) => ['emergency', 'high'].includes(item.consultation?.riskLevel));
   const openPatient = (item) => { if (item?.patient?.id) onPatient(item); };
-  return <div className="page"><div className="page-title"><div><span className="eyebrow"><Stethoscope size={15}/>临床工作台</span><h1>今日接诊工作台</h1><p>共 {data.summary.total} 位我的患者，{data.summary.highRisk} 位需要优先关注。</p></div><div className="date-control"><CalendarDays size={17}/>{new Date().toLocaleDateString('zh-CN',{year:'numeric',month:'long',day:'numeric'})}</div></div>
-        <section className="work-overview"><div className="subsection-heading"><div><span>今日工作概览</span><small>先处理风险和待办，再进入患者档案</small></div></div><div className="stats-grid doctor-stats"><StatCard icon={Users} tone="blue" label="我的患者" value={data.summary.total} detail={`${data.summary.pending} 位待接诊`} onClick={() => onPatientsView('today')}/><StatCard icon={AlertTriangle} tone="rose" label="高风险患者" value={data.summary.highRisk} detail="规则优先排序" onClick={() => onPatientsView('high')}/><StatCard icon={ClipboardCheck} tone="violet" label="待办随访" value={data.summary.followups} detail={`${data.summary.abnormalFollowups} 项异常关注`} onClick={() => setActive('followups')}/><StatCard icon={ShieldCheck} tone="green" label="资料访问" value="已审计" detail="查看行为自动留痕"/></div></section>
+  return <div className="page"><div className="page-title"><div><span className="eyebrow"><Stethoscope size={15}/>临床工作台</span><h1>今日接诊工作台</h1><p>共 {data.summary.total} 位我的患者，{data.summary.priorityRisk} 位需要优先关注。</p></div><div className="date-control"><CalendarDays size={17}/>{new Date().toLocaleDateString('zh-CN',{year:'numeric',month:'long',day:'numeric'})}</div></div>
+        <section className="work-overview"><div className="subsection-heading"><div><span>今日工作概览</span><small>先处理风险和待办，再进入患者档案</small></div></div><div className="stats-grid doctor-stats"><StatCard icon={Users} tone="blue" label="我的患者" value={data.summary.total} detail={`${data.summary.pending} 位待接诊`} onClick={() => onPatientsView('today')}/><StatCard icon={Siren} tone="rose" label="优先患者" value={data.summary.priorityRisk} detail={`${data.summary.emergency} 位紧急 · ${data.summary.highRisk} 位高风险`} onClick={() => onPatientsView('emergency')}/><StatCard icon={ClipboardCheck} tone="violet" label="待办随访" value={data.summary.followups} detail={`${data.summary.abnormalFollowups} 项异常关注`} onClick={() => setActive('followups')}/><StatCard icon={ShieldCheck} tone="green" label="资料访问" value="已审计" detail="查看行为自动留痕"/></div></section>
       <div className="doctor-layout"><section className="panel patient-list-panel today-queue"><div className="section-heading"><div><h2>今日接诊队列</h2><p>今天需要处理的患者，按风险程度和预约时间排序</p></div></div><div className="patient-table"><div className="table-head"><span>患者</span><span>风险</span><span>症状摘要</span><span>预约时间</span><span>状态</span></div>{data.queue.map((item)=><button type="button" className="table-row" key={item.booking.id} onClick={() => openPatient(item)}><span className="patient-cell"><i className={`avatar ${riskAvatarClass(item.consultation?.riskLevel)}`}>{item.patient.name.slice(0,1)}</i><span><strong>{item.patient.name}</strong><small>{item.patient.gender} · {item.patient.age} 岁</small></span></span><span><RiskBadge risk={riskLabel(item.consultation?.riskLevel)}/></span><span className="symptom-cell">{item.report?.chiefComplaint || '报告摘要待生成'}</span><span className="muted">{new Date(item.booking.appointmentAt).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span><span className="patient-status">{item.booking.status === 'completed' ? '已完成' : '待接诊'}</span></button>)}</div></section><aside className="doctor-aside"><div className="panel priority-card"><div className="priority-head"><span><Zap size={18}/>优先关注</span><em>规则引擎</em></div><div className="priority-patient"><div className={`avatar ${riskAvatarClass(priority.consultation?.riskLevel)}`}>{priority.patient.name.slice(0,1)}</div><div><strong>{priority.patient.name} · {priority.patient.age} 岁</strong><span>{priority.consultation.dangerSignals.join('、') || '高风险基础病史'}</span></div></div><div className="risk-reason"><AlertTriangle size={18}/><p><strong>危险信号不可被 AI 降级</strong><span>{priority.report?.aiRiskNote}</span></p></div><button type="button" className="dark-button" onClick={() => openPatient(priority)}>立即查看资料<ArrowRight size={16}/></button></div><div className="panel schedule-card secondary-panel"><div className="section-heading"><div><h2>资料移交状态</h2><p>挂号成功后才允许医生访问</p></div></div>{data.queue.slice(0,3).map((item)=><div className="schedule-row" key={item.booking.id}><strong>{new Date(item.booking.appointmentAt).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}</strong><i/><div><span>{item.patient.name}</span><small>{item.booking.department} · 报告已移交</small></div><em>已授权</em></div>)}</div></aside></div></div>;
   }
 
@@ -3148,9 +3149,9 @@ function LiveDoctorPatients({ onPatient, scope = 'all' }) {
   const [error, setError] = useState('');
   const [collapsed, setCollapsed] = useState({});
   const [keyword, setKeyword] = useState('');
-  const [filter, setFilter] = useState(scope === 'high' ? 'high' : 'all');
+  const [filter, setFilter] = useState(['emergency', 'high'].includes(scope) ? scope : 'all');
   useEffect(() => {
-    const request = scope === 'all' ? api.doctorPatients() : api.doctorWorkbench(); request.then((result) => { const patients = scope === 'all' ? result.patients : result.queue; setData({ patients, followupPatientIds: new Set(patients.filter((item) => item.latestFollowup?.status === 'pending').map((item) => item.patient.id)) }); setFilter(scope === 'high' ? 'high' : 'all'); }).catch((requestError) => setError(requestError.message));
+    const request = scope === 'all' ? api.doctorPatients() : api.doctorWorkbench(); request.then((result) => { const patients = scope === 'all' ? result.patients : result.queue; setData({ patients, followupPatientIds: new Set(patients.filter((item) => item.latestFollowup?.status === 'pending').map((item) => item.patient.id)) }); setFilter(['emergency', 'high'].includes(scope) ? scope : 'all'); }).catch((requestError) => setError(requestError.message));
   }, [scope]);
   if (!data) return error ? <EmptyState icon={AlertTriangle} title="无法读取患者列表" message={error}/> : <DataLoading label="正在按风险程度整理患者列表…"/>;
   const filteredQueue = data.patients.filter((item) => {
@@ -3158,11 +3159,11 @@ function LiveDoctorPatients({ onPatient, scope = 'all' }) {
     const isFollowup = data.followupPatientIds.has(item.patient.id);
     const isCompleted = item.booking.status === 'completed' || Boolean(item.latestDisposition);
     const recentVisit = Date.now() - new Date(item.booking.appointmentAt).getTime() < 30 * 24 * 3600000;
-    return matchesKeyword && (filter === 'all' || (filter === 'high' && item.consultation?.riskLevel === 'high') || (filter === 'followup' && isFollowup) || (filter === 'recent' && recentVisit) || (filter === 'pending' && !isCompleted));
+    return matchesKeyword && (filter === 'all' || (['emergency', 'high'].includes(filter) && item.consultation?.riskLevel === filter) || (filter === 'followup' && isFollowup) || (filter === 'recent' && recentVisit) || (filter === 'pending' && !isCompleted));
   });
-  const riskGroups = [{ risk: 'high', label: '高风险' }, { risk: 'medium', label: '中风险' }, { risk: 'low', label: '低风险' }].map((group) => ({ ...group, patients: filteredQueue.filter((item) => item.consultation?.riskLevel === group.risk) }));
-  const visibleRiskGroups = filter === 'high' ? riskGroups.filter((group) => group.risk === 'high') : riskGroups;
-  const viewTitle = scope === 'today' ? '今日患者' : scope === 'high' ? '高风险患者' : '我的患者';
+  const riskGroups = [{ risk: 'emergency', label: '紧急' }, { risk: 'high', label: '高风险' }, { risk: 'medium', label: '中风险' }, { risk: 'low', label: '低风险' }].map((group) => ({ ...group, patients: filteredQueue.filter((item) => item.consultation?.riskLevel === group.risk) }));
+  const visibleRiskGroups = ['emergency', 'high'].includes(filter) ? riskGroups.filter((group) => group.risk === filter) : riskGroups;
+  const viewTitle = scope === 'today' ? '今日患者' : scope === 'emergency' ? '紧急患者' : scope === 'high' ? '高风险患者' : '我的患者';
   return <div className="page">
     <div className="page-title">
       <div>
@@ -3176,11 +3177,11 @@ function LiveDoctorPatients({ onPatient, scope = 'all' }) {
         <div>
           <h2>患者列表</h2>
         </div>
-        <div className="patient-list-controls"><div className="search-box"><Search size={16}/><input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="搜索姓名或患者编号"/></div><select value={filter} onChange={(event) => setFilter(event.target.value)} aria-label="患者筛选"><option value="all">全部</option><option value="high">高风险</option><option value="followup">随访中</option><option value="recent">最近就诊</option><option value="pending">待处理</option></select></div>
+        <div className="patient-list-controls"><div className="search-box"><Search size={16}/><input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="搜索姓名或患者编号"/></div><select value={filter} onChange={(event) => setFilter(event.target.value)} aria-label="患者筛选"><option value="all">全部</option><option value="emergency">紧急</option><option value="high">高风险</option><option value="followup">随访中</option><option value="recent">最近就诊</option><option value="pending">待处理</option></select></div>
       </div>
       {visibleRiskGroups.map((group)=>
         <div className="patient-risk-group" key={group.risk}>
-          <button className="risk-group-heading" onClick={() => setCollapsed((current) => ({ ...current, [group.risk]: !current[group.risk] }))} aria-expanded={!collapsed[group.risk]}>
+          <button className={`risk-group-heading ${group.risk}`} onClick={() => setCollapsed((current) => ({ ...current, [group.risk]: !current[group.risk] }))} aria-expanded={!collapsed[group.risk]}>
             <h3>{group.label}</h3>
             <b>{group.patients.length}</b>
             <ChevronDown className={collapsed[group.risk] ? 'collapsed' : ''} size={17}/>
@@ -3198,7 +3199,7 @@ function LiveDoctorPatients({ onPatient, scope = 'all' }) {
             {group.patients.map((item, index)=>
               <button className="table-row patient-management-row" key={item.booking.id} onClick={() => onPatient(item)}>
                 <span className="patient-cell">
-                  <i className={`avatar ${group.risk === 'high' ? 'rose' : group.risk === 'medium' ? 'amber' : 'green'}`}>{item.patient.name.slice(0, 1)}</i>
+                  <i className={`avatar ${riskAvatarClass(group.risk)}`}>{item.patient.name.slice(0, 1)}</i>
                   <span>
                     <strong>{item.patient.name}</strong>
                     <small>{item.patient.gender} · {item.patient.age} 岁</small>
@@ -3276,8 +3277,8 @@ function LiveDoctorApp({ active, user, setActive }) {
   useEffect(() => { setSelected(null); }, [active]);
   const openPatient = (queueItem) => setSelected({ queueItem, source: active });
   if(selected)return <LiveDoctorPatient queueItem={selected.queueItem} backLabel={selected.source.startsWith('patients') ? '返回患者列表' : '返回接诊工作台'} onBack={()=>setSelected(null)}/>;
-    if(active==='workspace')return <LiveDoctorWorkspace onPatient={openPatient} onPatientsView={(filter)=>setActive(filter==='high'?'patients-high':'patients-today')} setActive={setActive}/>;
-  if(active==='patients' || active==='patients-today' || active==='patients-high')return <LiveDoctorPatients onPatient={openPatient} scope={active==='patients-high'?'high':active==='patients-today'?'today':'all'}/>;
+    if(active==='workspace')return <LiveDoctorWorkspace onPatient={openPatient} onPatientsView={(filter)=>setActive(filter==='emergency'?'patients-emergency':filter==='high'?'patients-high':'patients-today')} setActive={setActive}/>;
+  if(active==='patients' || active==='patients-today' || active==='patients-emergency' || active==='patients-high')return <LiveDoctorPatients onPatient={openPatient} scope={active==='patients-emergency'?'emergency':active==='patients-high'?'high':active==='patients-today'?'today':'all'}/>;
   if(active==='followups')return <LiveDoctorFollowupsOverview/>;
   return <LiveDoctorSchedule user={user}/>;
 }
