@@ -135,6 +135,7 @@ function LivePatientReport({ setActive, latestReport }) {
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState('');
+  const [recordFilter, setRecordFilter] = useState('all');
   useEffect(() => {
     api.consultations().then((result) => {
       setConsultations(result.consultations);
@@ -153,6 +154,7 @@ function LivePatientReport({ setActive, latestReport }) {
   const report = detail?.report || (latestReport?.consultationId === selectedId ? latestReport : null);
   const statusLabels = { in_progress: '进行中', report_generated: '已生成报告', transferred: '已移交医生', ended: '已结束' };
   const statusLabel = statusLabels[consultation?.status] || consultation?.status;
+  const visibleConsultations = consultations.filter((item) => recordFilter === 'all' || (recordFilter === 'report' ? item.status !== 'in_progress' : item.riskLevel === recordFilter));
   const messages = detail?.messages || [];
   const directionItems = report?.possibleDirections?.length ? report.possibleDirections : ['疾病方向待医生进一步评估'];
   const riskMeta = report ? ({
@@ -164,7 +166,8 @@ function LivePatientReport({ setActive, latestReport }) {
   return <div className="page records-page"><button className="back-button" onClick={() => setActive('overview')}><ArrowLeft size={17}/>返回健康首页</button>
     <div className="page-title"><div><span className="eyebrow"><History size={15}/>患者问诊中心</span><h1>问诊记录</h1><p>查看进行中的问诊、完整历史对话和结构化报告。</p></div><button className="primary-button" onClick={() => setActive('consult')}><Plus size={17}/>开始新问诊</button></div>
     {error && <div className="inline-feedback">{error}</div>}
-    <div className="records-layout"><aside className="panel record-index"><div className="section-heading"><div><h2>全部记录</h2><p>{consultations.length} 次问诊</p></div></div>{consultations.map((item) => <button key={item.id} className={selectedId === item.id ? 'active' : ''} onClick={() => setSelectedId(item.id)}><span className={`record-status ${item.status}`}>{statusLabels[item.status] || item.status}</span><strong>{new Date(item.createdAt).toLocaleString('zh-CN')}</strong><small>{item.id.slice(-12).toUpperCase()} · {item.riskLevel === 'emergency' ? '紧急' : item.riskLevel === 'high' ? '高' : item.riskLevel === 'medium' ? '中' : '低'}风险</small><ChevronRight size={16}/></button>)}</aside>
+    <div className="report-filters">{[['all','全部'],['report','已有报告'],['emergency','紧急'],['high','高风险'],['medium','中风险'],['low','低风险']].map(([key,label])=><button className={recordFilter===key?'active':''} key={key} onClick={()=>{setRecordFilter(key);const first=consultations.find((item)=>key==='all'||(key==='report'?item.status!=='in_progress':item.riskLevel===key));if(first)setSelectedId(first.id)}}>{label}</button>)}</div>
+    <div className="records-layout"><aside className="panel record-index"><div className="section-heading"><div><h2>问诊记录</h2><p>{visibleConsultations.length} 条匹配记录</p></div></div>{visibleConsultations.map((item) => <button key={item.id} className={selectedId === item.id ? 'active' : ''} onClick={() => setSelectedId(item.id)}><span className={`record-status ${item.status}`}>{statusLabels[item.status] || item.status}</span><strong>{new Date(item.createdAt).toLocaleString('zh-CN')}</strong><small>{item.id.slice(-12).toUpperCase()} · {item.riskLevel === 'emergency' ? '紧急' : item.riskLevel === 'high' ? '高' : item.riskLevel === 'medium' ? '中' : '低'}风险</small><ChevronRight size={16}/></button>)}</aside>
       <section className="record-content">{detailLoading ? <div className="panel record-loading">正在读取问诊详情…</div> : <>
         <div className="panel record-summary"><div><span className={`record-status ${consultation?.status}`}>{statusLabel}</span><h2>问诊编号 {consultation?.id.slice(-12).toUpperCase()}</h2><p>{new Date(consultation?.createdAt).toLocaleString('zh-CN')} · 当前风险：{consultation?.riskLevel === 'emergency' ? '紧急' : consultation?.riskLevel === 'high' ? '高' : consultation?.riskLevel === 'medium' ? '中' : '低'}</p></div>{consultation?.status === 'in_progress' && <button className="primary-button" onClick={() => setActive('consult')}>继续问诊<ArrowRight size={16}/></button>}</div>
         <div className="panel timeline-panel"><div className="section-heading"><div><h2>完整问诊对话</h2><p>{messages.length} 条消息，按发生时间保存</p></div></div><div className="conversation-record patient-conversation">{messages.map((item) => <div className={item.role} key={item.id}><span>{item.role === 'user' ? '我' : '眩衡助手'}</span><p>{item.content}</p><time>{new Date(item.createdAt).toLocaleString('zh-CN')}</time></div>)}</div></div>
