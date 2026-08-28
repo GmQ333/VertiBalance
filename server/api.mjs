@@ -16,6 +16,14 @@ const now = () => new Date().toISOString();
 const strongPassword = (value) => typeof value === 'string' && value.length >= 8 && /[A-Za-z]/.test(value) && /\d/.test(value);
 const followupTypes = new Set(['medication', 'revisit', 'rehabilitation', 'questionnaire', 'warning']);
 
+function decodeUploadFilename(value) {
+  const input = String(value || '').replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  if (!input) return '未命名资料';
+  if (!/[ÃÂæçèéå]/.test(input)) return input;
+  const decoded = Buffer.from(input, 'latin1').toString('utf8');
+  return decoded.includes('\uFFFD') ? input : decoded;
+}
+
 function parseDate(value, fieldName) {
   const date = new Date(value);
   if (!value || Number.isNaN(date.getTime())) throw httpError(400, 'INVALID_DATE', `${fieldName}格式不正确`);
@@ -496,7 +504,7 @@ export function createApiRouter(store, options = {}) {
     let item;
     try {
       item = await store.transaction(['uploads', 'audits'], (data) => {
-        const created = { id: createId('upl'), patientId: req.user.id, consultationId, name: req.file.originalname.slice(0, 180), mimeType: req.file.mimetype, size: req.file.size, storedName, category: String(req.body?.category || '检查资料').slice(0, 30), createdAt: now() };
+        const created = { id: createId('upl'), patientId: req.user.id, consultationId, name: decodeUploadFilename(req.file.originalname).slice(0, 180), mimeType: req.file.mimetype, size: req.file.size, storedName, category: String(req.body?.category || '检查资料').slice(0, 30), createdAt: now() };
         data.uploads.push(created); data.audits.push(auditEntry(req.user, 'medical_file_uploaded', 'upload', created.id, `患者上传${created.category}，${Math.round(created.size / 1024)}KB`)); return created;
       });
     } catch (error) {
